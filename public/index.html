@@ -1,0 +1,24 @@
+<script>
+    const socket = io();
+    const messages = document.getElementById('messages');
+    const input = document.getElementById('message-input');
+    const button = document.getElementById('send-button');
+
+    button.addEventListener('click', () => {
+        const message = input.value.trim();
+        if (message) {
+            console.log(`Message sent: ${message}`); // Log message to console
+            const item = document.createElement('li'); // Create a new list item
+            item.textContent = message;
+            messages.appendChild(item); // Append to chat box locally
+            socket.emit('chat message', message); // Send to server
+            input.value = ''; // Clear input box
+        }
+    });
+
+    socket.on('chat message', (msg) => {
+        const item = document.createElement('li');
+        item.textContent = msg;
+        messages.appendChild(item);
+    });
+</script>
