@@ -38,6 +38,27 @@ io.on('connection', (socket) => {
     });
 });
 
+const { exec } = require('child_process');
+
+// Function to run idle.sh
+function runIdleScript() {
+    exec('bash idle.sh', (error, stdout, stderr) => {
+        if (error) {
+            console.error(`Error executing idle.sh: ${error.message}`);
+            return;
+        }
+        if (stderr) {
+            console.error(`Script error: ${stderr}`);
+            return;
+        }
+        console.log(`Idle script output: ${stdout}`);
+    });
+}
+
+// Schedule idle.sh to run every 5 minutes (300,000 ms)
+setInterval(runIdleScript, 300000); // Adjust the interval as needed
+
+
 // Start the server
 server.listen(3000, () => {
     console.log('Server is running on http://localhost:3000');
