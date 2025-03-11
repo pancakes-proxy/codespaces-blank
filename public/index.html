@@ -6,26 +6,43 @@
     <title>Chat Service</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
+        body { font-family: Arial, sans-serif; margin: 0; display: flex; }
+        #sidebar { width: 20%; background: #f0f0f0; padding: 10px; border-right: 1px solid #ddd; }
+        #chat-container { width: 80%; padding: 20px; }
         ul { list-style-type: none; padding: 0; }
         li { margin: 5px 0; }
         #messages { max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; }
+        img { max-width: 100%; }
         #message-input, #username-input { width: 70%; margin-right: 5px; }
         #username-button, #send-button { margin-top: 5px; }
+        #user-details { margin-top: 20px; }
     </style>
 </head>
 <body>
-    <h1>Chat Service</h1>
-    <ul id="messages"></ul>
+    <div id="sidebar">
+        <h3>Online Users</h3>
+        <ul id="user-list"></ul>
+    </div>
+    <div id="chat-container">
+        <h1>Chat Service</h1>
+        <ul id="messages"></ul>
 
-    <!-- Username Input -->
-    <input id="username-input" placeholder="Set your username..." autocomplete="off">
-    <button id="username-button">Set Username</button>
-    <br>
+        <!-- Username Input -->
+        <input id="username-input" placeholder="Set your username..." autocomplete="off">
+        <button id="username-button">Set Username</button>
+        <br>
 
-    <!-- Chat Input -->
-    <input id="message-input" autocomplete="off" placeholder="Type your message...">
-    <button id="send-button">Send</button>
+        <!-- Chat Input -->
+        <input id="message-input" autocomplete="off" placeholder="Type your message...">
+        <button id="send-button">Send</button>
+
+        <div id="user-details">
+            <h3>Selected User</h3>
+            <p><strong>Username:</strong> <span id="selected-username"></span></p>
+            <p><strong>Default Username:</strong> <span id="selected-default-username"></span></p>
+            <button id="dm-button" disabled>Direct Message</button>
+        </div>
+    </div>
 
     <script>
         const socket = io();
@@ -34,8 +51,13 @@
         const usernameButton = document.getElementById('username-button');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
+        const userList = document.getElementById('user-list');
+        const selectedUsername = document.getElementById('selected-username');
+        const selectedDefaultUsername = document.getElementById('selected-default-username');
+        const dmButton = document.getElementById('dm-button');
 
         let username = "Anonymous";
+        let selectedUserId = null;
 
         // Update username
         usernameButton.addEventListener('click', () => {
@@ -48,7 +70,7 @@
             }
         });
 
-        // Send a chat message
+        // Send a message
         sendButton.addEventListener('click', () => {
             const message = messageInput.value.trim();
             if (message) {
@@ -57,10 +79,56 @@
             }
         });
 
-        // Display incoming chat messages
+        // Update online user list
+        socket.on('update users', (users) => {
+            userList.innerHTML = '';
+            for (const [id, user] of Object.entries(users)) {
+                const item = document.createElement('li');
+                item.textContent = user.isAdmin ? `[Admin] ${user.username}` : user.username;
+                item.addEventListener('click', () => {
+                    selectedUserId = id;
+                    selectedUsername.textContent = user.username;
+                    selectedDefaultUsername.textContent = user.defaultUsername;
+                    dmButton.disabled = false;
+                });
+                userList.appendChild(item);
+            }
+        });
+
+        // Handle DM button
+        dmButton.addEventListener('click', () => {
+            if (selectedUserId) {
+                socket.emit('request dm', selectedUserId);
+            }
+        });
+
+        // Handle DM requests
+        socket.on('dm request', ({ from, roomId }) => {
+            alert("You have a direct message request. Redirecting to the private chat...");
+            socket.emit('accept dm', roomId);
+        });
+
+        // Redirect to private chat
+        socket.on('redirect dm', (roomId) => {
+            window.location.href = `/DM${roomId}`;
+        });
+
+        // Display incoming messages
         socket.on('chat message', (msg) => {
             const item = document.createElement('li');
-            item.textContent = msg;
+
+            // Check if the message is an image URL
+            if (/\.(jpg|jpeg|png|gif)$/i.test(msg)) {
+                const image = document.createElement('img');
+                image.src = msg;
+                image.alt = "Shared Image";
+                image.style.maxWidth = "100%";
+                item.appendChild(image);
+            } else {
+                // Render message as text
+                item.textContent = msg;
+            }
+
             messages.appendChild(item);
         });
 
@@ -69,12 +137,23 @@
             alert(`Chat is now ${lockStatus ? 'locked' : 'unlocked'}.`);
         });
 
-        // Handle cleared messages
+        // Clear all messages
         socket.on('chat history', (history) => {
-            messages.innerHTML = '';
+            messages.innerHTML = ''; // Clear the chat
             history.forEach((msg) => {
                 const item = document.createElement('li');
-                item.textContent = msg;
+
+                // Check if the message is an image URL
+                if (/\.(jpg|jpeg|png|gif)$/i.test(msg)) {
+                    const image = document.createElement('img');
+                    image.src = msg;
+                    image.alt = "Shared Image";
+                    image.style.maxWidth = "100%";
+                    item.appendChild(image);
+                } else {
+                    item.textContent = msg;
+                }
+
                 messages.appendChild(item);
             });
         });
@@ -84,65 +163,10 @@
             alert('Chat is currently locked. You cannot send messages.');
         });
     </script>
-    <script>
-    const socket = io();
-    const messages = document.getElementById('messages');
-    const usernameInput = document.getElementById('username-input');
-    const usernameButton = document.getElementById('username-button');
-    const messageInput = document.getElementById('message-input');
-    const sendButton = document.getElementById('send-button');
-
-    let username = "Anonymous";
-    const isAdmin = document.cookie.includes('ADMINSERVERSERVICEPERMSEC3256'); // Check for admin cookie
-
-    // Update username
-    usernameButton.addEventListener('click', () => {
-        const newUsername = usernameInput.value.trim();
-        if (newUsername) {
-            username = newUsername;
-            socket.emit('set username', username);
-            alert(`Your username is now set to: ${username}`);
-            usernameInput.value = '';
-        }
-    });
-
-    // Send a message
-    sendButton.addEventListener('click', () => {
-        const message = messageInput.value.trim();
-        if (message) {
-            const formattedMessage = isAdmin ? `[Admin] ${username}: ${message}` : `${username}: ${message}`;
-            socket.emit('chat message', message); // Server handles the formatting for others
-            messageInput.value = '';
-        }
-    });
-
-    // Display incoming messages
-    socket.on('chat message', (msg) => {
-        const item = document.createElement('li');
-        item.innerHTML = msg.replace('[Admin]', '<span style="color: red;">[Admin]</span>'); // Red admin tag
-        messages.appendChild(item);
-    });
-
-    // Handle chat lock status
-    socket.on('chat lock status', (lockStatus) => {
-        alert(`Chat is now ${lockStatus ? 'locked' : 'unlocked'}.`);
-    });
-
-    // Clear all messages
-    socket.on('chat history', (history) => {
-        messages.innerHTML = '';
-        history.forEach((msg) => {
-            const item = document.createElement('li');
-            item.innerHTML = msg.replace('[Admin]', '<span style="color: red;">[Admin]</span>'); // Red admin tag
-            messages.appendChild(item);
-        });
-    });
-
-    // Notify if chat is locked
-    socket.on('chat locked', () => {
-        alert('Chat is currently locked. You cannot send messages.');
-    });
-</script>
-
+    <h4>made by the learnhelp dev team and by pancakes (twitter @posey_zac)</h4>
+    <b>ISSUE BOARD</b>
+    <li>
+       <ul>DM API is not working so no messages are going through - level severe</ul> 
+    </li>
 </body>
 </html>
