@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .hidden { display: none; }
+        button { margin: 5px; padding: 10px; font-size: 16px; }
+        #announcement-input { width: 70%; margin-right: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Admin Panel</h1>
+
+    <!-- Login Form -->
+    <div id="login">
+        <input id="username" type="text" placeholder="Username">
+        <input id="password" type="password" placeholder="Password">
+        <button id="login-button">Login</button>
+        <p id="login-error" style="color: red;" class="hidden">Invalid credentials. Please try again.</p>
+    </div>
+
+    <!-- Admin Controls -->
+    <div id="admin-controls" class="hidden">
+        <button id="lock-button">Lock Chat</button>
+        <button id="unlock-button">Unlock Chat</button>
+        <button id="clear-button">Clear Messages</button>
+        <br>
+        <input id="announcement-input" placeholder="Type your announcement...">
+        <button id="send-announcement-button">Send Announcement</button>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // Elements
+        const loginDiv = document.getElementById('login');
+        const adminControlsDiv = document.getElementById('admin-controls');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const loginButton = document.getElementById('login-button');
+        const loginError = document.getElementById('login-error');
+        const lockButton = document.getElementById('lock-button');
+        const unlockButton = document.getElementById('unlock-button');
+        const clearButton = document.getElementById('clear-button');
+        const announcementInput =
