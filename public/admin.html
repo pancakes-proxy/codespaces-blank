@@ -94,6 +94,21 @@
             }
         });
     </script>
+    <!-- Add this to the admin controls: -->
+<input id="message-input" placeholder="Type a message as admin...">
+<button id="send-message-button">Send</button>
+
+<script>
+    const sendMessageButton = document.getElementById('send-message-button');
+    const adminUsername = 'admin'; // Or dynamically set during login
+
+    sendMessageButton.addEventListener('click', () => {
+        const message = document.getElementById('message-input').value.trim();
+        if (message) {
+            socket.emit('chat message', message); // Sends as admin
+        }
+    });
+</script>
 </body>
 </html>
 
