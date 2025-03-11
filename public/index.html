@@ -35,28 +35,25 @@
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
 
-        let isChatLocked = false;
-
-        // Default username
         let username = "Anonymous";
 
-        // Handle username updates
+        // Update username
         usernameButton.addEventListener('click', () => {
             const newUsername = usernameInput.value.trim();
             if (newUsername) {
-                username = newUsername; // Update username locally
-                socket.emit('set username', username); // Notify the server of the username change
+                username = newUsername;
+                socket.emit('set username', username);
                 alert(`Your username is now set to: ${username}`);
-                usernameInput.value = ''; // Clear input field
+                usernameInput.value = '';
             }
         });
 
-        // Send chat messages
+        // Send a chat message
         sendButton.addEventListener('click', () => {
             const message = messageInput.value.trim();
             if (message) {
-                socket.emit('chat message', message); // Send message to the server
-                messageInput.value = ''; // Clear input field
+                socket.emit('chat message', message);
+                messageInput.value = '';
             }
         });
 
@@ -69,13 +66,12 @@
 
         // Handle chat lock status
         socket.on('chat lock status', (lockStatus) => {
-            isChatLocked = lockStatus;
             alert(`Chat is now ${lockStatus ? 'locked' : 'unlocked'}.`);
         });
 
-        // Clear all messages
+        // Handle cleared messages
         socket.on('chat history', (history) => {
-            messages.innerHTML = ''; // Clear all messages
+            messages.innerHTML = '';
             history.forEach((msg) => {
                 const item = document.createElement('li');
                 item.textContent = msg;
@@ -90,4 +86,3 @@
     </script>
 </body>
 </html>
-
