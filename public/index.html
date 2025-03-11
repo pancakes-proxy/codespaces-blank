@@ -84,5 +84,65 @@
             alert('Chat is currently locked. You cannot send messages.');
         });
     </script>
+    <script>
+    const socket = io();
+    const messages = document.getElementById('messages');
+    const usernameInput = document.getElementById('username-input');
+    const usernameButton = document.getElementById('username-button');
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+
+    let username = "Anonymous";
+    const isAdmin = document.cookie.includes('ADMINSERVERSERVICEPERMSEC3256'); // Check for admin cookie
+
+    // Update username
+    usernameButton.addEventListener('click', () => {
+        const newUsername = usernameInput.value.trim();
+        if (newUsername) {
+            username = newUsername;
+            socket.emit('set username', username);
+            alert(`Your username is now set to: ${username}`);
+            usernameInput.value = '';
+        }
+    });
+
+    // Send a message
+    sendButton.addEventListener('click', () => {
+        const message = messageInput.value.trim();
+        if (message) {
+            const formattedMessage = isAdmin ? `[Admin] ${username}: ${message}` : `${username}: ${message}`;
+            socket.emit('chat message', message); // Server handles the formatting for others
+            messageInput.value = '';
+        }
+    });
+
+    // Display incoming messages
+    socket.on('chat message', (msg) => {
+        const item = document.createElement('li');
+        item.innerHTML = msg.replace('[Admin]', '<span style="color: red;">[Admin]</span>'); // Red admin tag
+        messages.appendChild(item);
+    });
+
+    // Handle chat lock status
+    socket.on('chat lock status', (lockStatus) => {
+        alert(`Chat is now ${lockStatus ? 'locked' : 'unlocked'}.`);
+    });
+
+    // Clear all messages
+    socket.on('chat history', (history) => {
+        messages.innerHTML = '';
+        history.forEach((msg) => {
+            const item = document.createElement('li');
+            item.innerHTML = msg.replace('[Admin]', '<span style="color: red;">[Admin]</span>'); // Red admin tag
+            messages.appendChild(item);
+        });
+    });
+
+    // Notify if chat is locked
+    socket.on('chat locked', () => {
+        alert('Chat is currently locked. You cannot send messages.');
+    });
+</script>
+
 </body>
 </html>
