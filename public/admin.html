@@ -46,4 +46,54 @@
         const lockButton = document.getElementById('lock-button');
         const unlockButton = document.getElementById('unlock-button');
         const clearButton = document.getElementById('clear-button');
-        const announcementInput =
+        const announcementInput = document.getElementById('announcement-input');
+        const sendAnnouncementButton = document.getElementById('send-announcement-button');
+
+        // Admin Credentials
+        const adminUsername = 'admin';
+        const adminPassword = 'zaxc1122';
+
+        // Handle Login
+        loginButton.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
+
+            if (username === adminUsername && password === adminPassword) {
+                loginDiv.classList.add('hidden'); // Hide login form
+                adminControlsDiv.classList.remove('hidden'); // Show admin controls
+            } else {
+                loginError.classList.remove('hidden'); // Show error message
+            }
+        });
+
+        // Lock the chat
+        lockButton.addEventListener('click', () => {
+            socket.emit('admin lock');
+            alert('Chat has been locked.');
+        });
+
+        // Unlock the chat
+        unlockButton.addEventListener('click', () => {
+            socket.emit('admin unlock');
+            alert('Chat has been unlocked.');
+        });
+
+        // Clear all messages
+        clearButton.addEventListener('click', () => {
+            socket.emit('admin clear messages');
+            alert('All messages have been cleared.');
+        });
+
+        // Send an announcement
+        sendAnnouncementButton.addEventListener('click', () => {
+            const announcement = announcementInput.value.trim();
+            if (announcement) {
+                socket.emit('admin announcement', announcement); // Notify the server
+                alert('Announcement sent: ' + announcement);
+                announcementInput.value = ''; // Clear input field
+            }
+        });
+    </script>
+</body>
+</html>
+
