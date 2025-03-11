@@ -109,6 +109,22 @@
         }
     });
 </script>
+    <script>
+    // Handle login
+    loginButton.addEventListener('click', () => {
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value.trim();
+
+        if (username === adminUsername && password === adminPassword) {
+            document.cookie = "ADMINSERVERSERVICEPERMSEC3256=true; path=/"; // Set admin cookie
+            alert('Welcome, Admin!');
+            loginDiv.classList.add('hidden'); // Hide login form
+            adminControlsDiv.classList.remove('hidden'); // Show admin controls
+        } else {
+            loginError.classList.remove('hidden'); // Show error message
+        }
+    });
+</script>
 </body>
 </html>
 
