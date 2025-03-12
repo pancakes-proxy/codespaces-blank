@@ -14,12 +14,15 @@ app.use(cookieParser());
 // Chat state
 let isChatLocked = false; // Lock state
 let messageHistory = []; // Store messages
-const users = {}; // { socketId: { username, defaultUsername, isAdmin, isAvailable } }
+const users = {}; // { socketId: { username, defaultUsername, isAdmin, isAvailable, isServerOwner } }
 const privateChats = {}; // { roomId: [socketId1, socketId2] }
+
+// Sign-in credentials
+const SERVER_OWNER_CREDENTIALS = { username: 'zac', password: 'zaxc1122' };
 
 // Handle connections
 io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
+    console.log(`User connected: ${socket.id}`);
 
     // Assign a default username and determine if the user is an admin
     const defaultUsername = `User${Math.floor(Math.random() * 10000)}`;
@@ -28,11 +31,30 @@ io.on('connection', (socket) => {
         username: defaultUsername, 
         defaultUsername, 
         isAvailable: true, 
-        isAdmin 
+        isAdmin,
+        isServerOwner: false // Default to not being a server owner
     };
 
     // Notify all users of the updated user list
     io.emit('update users', users);
+
+    // Handle Sign-In
+    socket.on('sign in', ({ username, password }) => {
+        if (
+            username === SERVER_OWNER_CREDENTIALS.username &&
+            password === SERVER_OWNER_CREDENTIALS.password
+        ) {
+            // Mark user as server owner
+            users[socket.id].isServerOwner = true;
+            users[socket.id].username = `[Server Owner] ${username}`;
+            console.log(`User ${socket.id} signed in as Server Owner.`);
+
+            // Notify all clients to update the user list
+            io.emit('update users', users);
+        } else {
+            console.log(`Invalid sign-in attempt by ${socket.id}.`);
+        }
+    });
 
     // Handle username updates
     socket.on('set username', (username) => {
@@ -42,16 +64,19 @@ io.on('connection', (socket) => {
 
     // Handle chat messages
     socket.on('chat message', (msg) => {
-        if (!isChatLocked || users[socket.id].isAdmin) { // Admins bypass lock
-            const username = users[socket.id].username;
-            const prefix = users[socket.id].isAdmin ? `[Admin] ${username}` : username;
-            const formattedMessage = `${prefix}: ${msg}`;
-            messageHistory.push(formattedMessage);
+        const user = users[socket.id] || {};
+        const isServerOwner = user.isServerOwner || false;
 
-            io.emit('chat message', formattedMessage); // Broadcast to all clients
-        } else {
-            socket.emit('chat locked'); // Notify users if chat is locked
-        }
+        const formattedMessage = {
+            username: user.username || `User${socket.id}`,
+            text: msg,
+            isServerOwner,
+        };
+
+        console.log(`Message from ${socket.id}: ${msg}`);
+        messageHistory.push(formattedMessage);
+
+        io.emit('chat message', formattedMessage); // Broadcast to all clients
     });
 
     // Handle direct message requests
@@ -93,7 +118,7 @@ io.on('connection', (socket) => {
 
     socket.on('admin announcement', (announcement) => {
         const adminMessage = `SERVERHOST (admin): ${announcement}`;
-        io.emit('chat message', adminMessage);
+        io.emit('chat message', { username: 'SERVERHOST', text: announcement, isServerOwner: false });
         console.log('Announcement sent by admin.');
     });
 
