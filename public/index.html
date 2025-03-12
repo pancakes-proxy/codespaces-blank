@@ -168,5 +168,57 @@
     <li>
        <ul>DM API is not working so no messages are going through - level severe</ul> 
     </li>
+        <!-- Sign-In Form -->
+<div id="sign-in">
+    <h3>Sign In</h3>
+    <input id="signin-username" type="text" placeholder="Username">
+    <input id="signin-password" type="password" placeholder="Password">
+    <button id="signin-button">Sign In</button>
+</div>
+
+<script>
+    const socket = io();
+
+    const signinButton = document.getElementById('signin-button');
+    const signinUsername = document.getElementById('signin-username');
+    const signinPassword = document.getElementById('signin-password');
+    const messages = document.getElementById('messages');
+
+    // Handle Sign-In
+    signinButton.addEventListener('click', () => {
+        const username = signinUsername.value.trim();
+        const password = signinPassword.value.trim();
+
+        if (username && password) {
+            socket.emit('sign in', { username, password });
+        }
+    });
+
+    // Display server owner messages in red
+    socket.on('chat message', (msg) => {
+        const item = document.createElement('li');
+        if (msg.isServerOwner) {
+            item.style.color = 'red';
+            item.textContent = `[Server Owner] ${msg.username}: ${msg.text}`;
+        } else {
+            item.textContent = `${msg.username}: ${msg.text}`;
+        }
+        messages.appendChild(item);
+    });
+
+    // Update user list
+    socket.on('update users', (users) => {
+        const userList = document.getElementById('user-list');
+        userList.innerHTML = '';
+        for (const [id, user] of Object.entries(users)) {
+            const item = document.createElement('li');
+            item.textContent = user.username;
+            if (user.isServerOwner) {
+                item.style.color = 'red';
+            }
+            userList.appendChild(item);
+        }
+    });
+</script>
 </body>
 </html>
