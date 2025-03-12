@@ -6,16 +6,39 @@
     <title>Chat Service</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; display: flex; }
-        #sidebar { width: 20%; background: #f0f0f0; padding: 10px; border-right: 1px solid #ddd; }
-        #chat-container { width: 80%; padding: 20px; }
-        ul { list-style-type: none; padding: 0; }
-        li { margin: 5px 0; }
-        #messages { max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; }
-        img { max-width: 100%; }
-        #message-input, #username-input { width: 70%; margin-right: 5px; }
-        #username-button, #send-button { margin-top: 5px; }
-        #user-details { margin-top: 20px; }
+        body {
+            font-family: Arial, sans-serif; margin: 0; display: flex;
+        }
+        #sidebar {
+            width: 20%; background: #f0f0f0; padding: 10px; border-right: 1px solid #ddd;
+        }
+        #chat-container {
+            width: 80%; padding: 20px;
+        }
+        ul {
+            list-style-type: none; padding: 0;
+        }
+        li {
+            margin: 5px 0;
+        }
+        #messages {
+            max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px;
+        }
+        img {
+            max-width: 100%;
+        }
+        #message-input, #username-input {
+            width: 70%; margin-right: 5px;
+        }
+        #username-button, #send-button, #signin-button {
+            margin-top: 5px;
+        }
+        #user-details {
+            margin-top: 20px;
+        }
+        .server-owner {
+            color: red; font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -36,16 +59,27 @@
         <input id="message-input" autocomplete="off" placeholder="Type your message...">
         <button id="send-button">Send</button>
 
+        <!-- Selected User Details -->
         <div id="user-details">
             <h3>Selected User</h3>
             <p><strong>Username:</strong> <span id="selected-username"></span></p>
             <p><strong>Default Username:</strong> <span id="selected-default-username"></span></p>
             <button id="dm-button" disabled>Direct Message</button>
         </div>
+
+        <!-- Sign-In Form -->
+        <div id="sign-in">
+            <h3>Sign In</h3>
+            <input id="signin-username" type="text" placeholder="Username">
+            <input id="signin-password" type="password" placeholder="Password">
+            <button id="signin-button">Sign In</button>
+        </div>
     </div>
 
     <script>
         const socket = io();
+
+        // DOM Elements
         const messages = document.getElementById('messages');
         const usernameInput = document.getElementById('username-input');
         const usernameButton = document.getElementById('username-button');
@@ -55,11 +89,26 @@
         const selectedUsername = document.getElementById('selected-username');
         const selectedDefaultUsername = document.getElementById('selected-default-username');
         const dmButton = document.getElementById('dm-button');
+        const signinButton = document.getElementById('signin-button');
+        const signinUsername = document.getElementById('signin-username');
+        const signinPassword = document.getElementById('signin-password');
 
         let username = "Anonymous";
         let selectedUserId = null;
 
-        // Update username
+        // Handle Sign-In
+        signinButton.addEventListener('click', () => {
+            const signInUsername = signinUsername.value.trim();
+            const signInPassword = signinPassword.value.trim();
+
+            if (signInUsername && signInPassword) {
+                socket.emit('sign in', { username: signInUsername, password: signInPassword });
+                signinUsername.value = '';
+                signinPassword.value = '';
+            }
+        });
+
+        // Handle Username Updates
         usernameButton.addEventListener('click', () => {
             const newUsername = usernameInput.value.trim();
             if (newUsername) {
@@ -70,7 +119,7 @@
             }
         });
 
-        // Send a message
+        // Send Chat Message
         sendButton.addEventListener('click', () => {
             const message = messageInput.value.trim();
             if (message) {
@@ -79,12 +128,15 @@
             }
         });
 
-        // Update online user list
+        // Update Online User List
         socket.on('update users', (users) => {
             userList.innerHTML = '';
             for (const [id, user] of Object.entries(users)) {
                 const item = document.createElement('li');
-                item.textContent = user.isAdmin ? `[Admin] ${user.username}` : user.username;
+                item.textContent = user.username;
+                if (user.isServerOwner) {
+                    item.classList.add('server-owner');
+                }
                 item.addEventListener('click', () => {
                     selectedUserId = id;
                     selectedUsername.textContent = user.username;
@@ -95,130 +147,63 @@
             }
         });
 
-        // Handle DM button
+        // Handle Direct Message Button
         dmButton.addEventListener('click', () => {
             if (selectedUserId) {
                 socket.emit('request dm', selectedUserId);
             }
         });
 
-        // Handle DM requests
+        // Handle DM Requests
         socket.on('dm request', ({ from, roomId }) => {
             alert("You have a direct message request. Redirecting to the private chat...");
             socket.emit('accept dm', roomId);
         });
 
-        // Redirect to private chat
+        // Redirect to Private Chat
         socket.on('redirect dm', (roomId) => {
             window.location.href = `/DM${roomId}`;
         });
 
-        // Display incoming messages
+        // Display Chat Messages
         socket.on('chat message', (msg) => {
             const item = document.createElement('li');
-
-            // Check if the message is an image URL
-            if (/\.(jpg|jpeg|png|gif)$/i.test(msg)) {
-                const image = document.createElement('img');
-                image.src = msg;
-                image.alt = "Shared Image";
-                image.style.maxWidth = "100%";
-                item.appendChild(image);
+            if (msg.isServerOwner) {
+                item.style.color = 'red';
+                item.textContent = `[Server Owner] ${msg.username}: ${msg.text}`;
             } else {
-                // Render message as text
-                item.textContent = msg;
+                item.textContent = `${msg.username}: ${msg.text}`;
             }
-
             messages.appendChild(item);
         });
 
-        // Handle chat lock status
+        // Handle Chat Lock Status
         socket.on('chat lock status', (lockStatus) => {
             alert(`Chat is now ${lockStatus ? 'locked' : 'unlocked'}.`);
         });
 
-        // Clear all messages
+        // Clear All Messages
         socket.on('chat history', (history) => {
-            messages.innerHTML = ''; // Clear the chat
+            messages.innerHTML = '';
             history.forEach((msg) => {
                 const item = document.createElement('li');
-
-                // Check if the message is an image URL
-                if (/\.(jpg|jpeg|png|gif)$/i.test(msg)) {
-                    const image = document.createElement('img');
-                    image.src = msg;
-                    image.alt = "Shared Image";
-                    image.style.maxWidth = "100%";
-                    item.appendChild(image);
-                } else {
-                    item.textContent = msg;
+                if (msg.isServerOwner) {
+                    item.style.color = 'red';
                 }
-
+                item.textContent = `${msg.username}: ${msg.text}`;
                 messages.appendChild(item);
             });
         });
 
-        // Notify if chat is locked
+        // Notify If Chat Is Locked
         socket.on('chat locked', () => {
             alert('Chat is currently locked. You cannot send messages.');
         });
     </script>
-    <h4>made by the learnhelp dev team and by pancakes (twitter @posey_zac)</h4>
-    <b>ISSUE BOARD</b>
-    <li>
-       <ul>DM API is not working so no messages are going through - level severe</ul> 
-    </li>
-        <!-- Sign-In Form -->
-<div id="sign-in">
-    <h3>Sign In</h3>
-    <input id="signin-username" type="text" placeholder="Username">
-    <input id="signin-password" type="password" placeholder="Password">
-    <button id="signin-button">Sign In</button>
-</div>
-
-<script>
-    const socket = io();
-
-    const signinButton = document.getElementById('signin-button');
-    const signinUsername = document.getElementById('signin-username');
-    const signinPassword = document.getElementById('signin-password');
-    const messages = document.getElementById('messages');
-
-    // Handle Sign-In
-    signinButton.addEventListener('click', () => {
-        const username = signinUsername.value.trim();
-        const password = signinPassword.value.trim();
-
-        if (username && password) {
-            socket.emit('sign in', { username, password });
-        }
-    });
-
-    // Display server owner messages in red
-    socket.on('chat message', (msg) => {
-        const item = document.createElement('li');
-        if (msg.isServerOwner) {
-            item.style.color = 'red';
-            item.textContent = `[Server Owner] ${msg.username}: ${msg.text}`;
-        } else {
-            item.textContent = `${msg.username}: ${msg.text}`;
-        }
-        messages.appendChild(item);
-    });
-
-    // Update user list
-    socket.on('update users', (users) => {
-        const userList = document.getElementById('user-list');
-        userList.innerHTML = '';
-        for (const [id, user] of Object.entries(users)) {
-            const item = document.createElement('li');
-            item.textContent = user.username;
-            if (user.isServerOwner) {
-                item.style.color = 'red';
-            }
-            userList.appendChild(item);
-        }
-    });
-</script>
+    <h4>Made by the LearnHelp Dev Team and by Pancakes (Twitter @posey_zac)</h4>
+    <h4>ISSUE BOARD</h4>
+    <ul>
+        <li>DM API is not working, so no messages are going through - level severe</li>
+    </ul>
 </body>
 </html>
