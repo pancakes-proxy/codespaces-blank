@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Service</title>
+    <title>The GC</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body {
@@ -45,7 +45,7 @@
         <ul id="user-list"></ul>
     </div>
     <div id="chat-container">
-        <h1>Chat Service</h1>
+        <h1>The gng GC </h1>
         <ul id="messages"></ul>
 
         <!-- Username Input -->
@@ -144,10 +144,10 @@
             const item = document.createElement('li');
             if (msg.role === 'Server Owner') {
                 item.style.color = 'red';
-                item.textContent = `[Server Owner] ${msg.username}: ${msg.text}`;
+                item.textContent = `[Staff] ${msg.username}: ${msg.text}`;
             } else if (msg.role === 'Developer') {
                 item.style.color = 'blue';
-                item.textContent = `[Developer] ${msg.username}: ${msg.text}`;
+                item.textContent = `[Staff] ${msg.username}: ${msg.text}`;
             } else {
                 item.textContent = `${msg.username}: ${msg.text}`;
             }
