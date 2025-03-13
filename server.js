@@ -14,17 +14,22 @@ app.use(cookieParser());
 // Chat state
 let isChatLocked = false; // Lock state
 let messageHistory = []; // Store messages
-const users = {}; // { socketId: { username, defaultUsername, isAdmin, isAvailable, isServerOwner } }
+const users = {}; // { socketId: { username, defaultUsername, isAdmin, isAvailable, role } }
 const privateChats = {}; // { roomId: [socketId1, socketId2] }
 
-// Sign-in credentials
-const SERVER_OWNER_CREDENTIALS = { username: 'zac', password: 'zaxc1122' };
+// Special user sign-in credentials
+const SPECIAL_USERS = [
+    { username: 'zac', password: 'zaxc1122', role: 'Server Owner' },
+    { username: 'lily', password: 'lily1', role: 'Developer' },
+    { username: 'izzy', password: 'izzy', role: 'Developer'},
+    { username: 'JW', password: 'JW', role: 'Developer'}
+];
 
 // Handle connections
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
 
-    // Assign a default username and determine if the user is an admin
+    // Assign a default username and initialize user data
     const defaultUsername = `User${Math.floor(Math.random() * 10000)}`;
     const isAdmin = socket.handshake.headers.cookie?.includes('ADMINSERVERSERVICEPERMSEC3256') || false;
     users[socket.id] = { 
@@ -32,24 +37,22 @@ io.on('connection', (socket) => {
         defaultUsername, 
         isAvailable: true, 
         isAdmin,
-        isServerOwner: false // Default to not being a server owner
+        role: null // Default to no special role
     };
 
-    // Notify all users of the updated user list
+    // Notify all clients of the updated user list
     io.emit('update users', users);
 
-    // Handle Sign-In
+    // Handle special user sign-in
     socket.on('sign in', ({ username, password }) => {
-        if (
-            username === SERVER_OWNER_CREDENTIALS.username &&
-            password === SERVER_OWNER_CREDENTIALS.password
-        ) {
-            // Mark user as server owner
-            users[socket.id].isServerOwner = true;
-            users[socket.id].username = `[Server Owner] ${username}`;
-            console.log(`User ${socket.id} signed in as Server Owner.`);
+        const specialUser = SPECIAL_USERS.find(user => user.username === username && user.password === password);
+        if (specialUser) {
+            // Grant special role
+            users[socket.id].role = specialUser.role;
+            users[socket.id].username = `[${specialUser.role}] ${username}`;
+            console.log(`User ${socket.id} signed in as ${specialUser.role}.`);
 
-            // Notify all clients to update the user list
+            // Notify all clients of updated user list
             io.emit('update users', users);
         } else {
             console.log(`Invalid sign-in attempt by ${socket.id}.`);
@@ -62,15 +65,13 @@ io.on('connection', (socket) => {
         io.emit('update users', users); // Notify all users
     });
 
-    // Handle chat messages
+    // Handle general chat messages
     socket.on('chat message', (msg) => {
         const user = users[socket.id] || {};
-        const isServerOwner = user.isServerOwner || false;
-
         const formattedMessage = {
             username: user.username || `User${socket.id}`,
             text: msg,
-            isServerOwner,
+            role: user.role || null // Attach role if available
         };
 
         console.log(`Message from ${socket.id}: ${msg}`);
@@ -97,7 +98,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Admin actions
+    // Admin-only actions
     socket.on('admin lock', () => {
         isChatLocked = true;
         io.emit('chat lock status', isChatLocked);
@@ -118,13 +119,35 @@ io.on('connection', (socket) => {
 
     socket.on('admin announcement', (announcement) => {
         const adminMessage = `SERVERHOST (admin): ${announcement}`;
-        io.emit('chat message', { username: 'SERVERHOST', text: announcement, isServerOwner: false });
+        io.emit('chat message', { username: 'SERVERHOST', text: announcement, role: null });
         console.log('Announcement sent by admin.');
     });
 
-    // Handle disconnection
+    // Handle Developer Chat room access
+    socket.on('join dev', (confirmed) => {
+        if (confirmed && users[socket.id]?.role) {
+            console.log(`User ${socket.id} joined Developer Chat.`);
+            socket.emit('dev message', `Welcome to the Developer Chat!`);
+        } else {
+            console.log(`User ${socket.id} declined access or unauthorized attempt.`);
+        }
+    });
+
+    // Handle Developer Chat messages
+    socket.on('dev chat message', (msg) => {
+        if (users[socket.id]?.role) {
+            io.to('Developer Chat').emit('dev chat message', {
+                username: users[socket.id].username,
+                text: msg
+            });
+        } else {
+            console.log(`Unauthorized message attempt by ${socket.id}.`);
+        }
+    });
+
+    // Handle disconnections
     socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
+        console.log(`User disconnected: ${socket.id}`);
         delete users[socket.id];
         io.emit('update users', users); // Notify all clients
     });
@@ -136,12 +159,12 @@ app.get('/DM:roomId', (req, res) => {
     res.sendFile(__dirname + '/public/private_chat.html'); // Serve private chat interface
 });
 
-// Serve admin page (use your existing admin page)
+// Serve admin page
 app.get('/admin', (req, res) => {
     res.sendFile(__dirname + '/public/admin.html'); // Path to your admin page
 });
 
 // Start the server
 server.listen(3000, () => {
-    console.log('Server is running on http://localhost:3000');
+    console.log('LCS - lantern chat service version 1.6E made by pancakes and learnhelp.cc | opened on http://localhost:3000');
 });
