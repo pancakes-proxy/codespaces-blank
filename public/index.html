@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The GC</title>
+    <title>The Chatroom</title>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2596258669748338"
      crossorigin="anonymous"></script>
     <script src="/socket.io/socket.io.js"></script>
@@ -47,7 +47,7 @@
         <ul id="user-list"></ul>
     </div>
     <div id="chat-container">
-        <h1>The GC </h1>
+        <h1>The Chatroom</h1>
         <ul id="messages"></ul>
 
         <!-- Username Input -->
@@ -68,7 +68,7 @@
         </div>
 
         <!-- Private Chat Button -->
-        <button id="dm-button" disabled>Direct Message</button>
+        <button id="dm-button" disabled>Direct Message (not working will be fixed in 2.0)</button>
 
     </div>
 
@@ -167,13 +167,13 @@
         socket.on('dm request', ({ from, roomId }) => {
             if (confirm('You have a DM request. Would you like to accept it?')) {
                 socket.emit('accept dm', roomId);
-                window.location.href = `/DM${roomId}`;
+                window.location.href = `/${roomId}`;
             }
         });
 
         // Handle DM Redirection
         socket.on('redirect dm', (roomId) => {
-            window.location.href = `/DM${roomId}`;
+            window.location.href = `/${roomId}`;
         });
     </script>
     <h4>made by learnhelp.cc dev team and pancakes</h4>
