@@ -21,8 +21,8 @@ const privateChats = {}; // { roomId: [socketId1, socketId2] }
 const SPECIAL_USERS = [
     { username: 'zac', password: 'zaxc1122', role: 'Server Owner' },
     { username: 'lily', password: 'lily1', role: 'Developer' },
-    { username: 'izzy', password: 'izzy', role: 'Developer'},
-    { username: 'JW', password: 'JW', role: 'Developer'}
+    { username: 'izzy', password: 'izzy', role: 'Developer' },
+    { username: 'JW', password: 'JW', role: 'Developer' }
 ];
 
 // Handle connections
@@ -31,12 +31,10 @@ io.on('connection', (socket) => {
 
     // Assign a default username and initialize user data
     const defaultUsername = `User${Math.floor(Math.random() * 10000)}`;
-    const isAdmin = socket.handshake.headers.cookie?.includes('ADMINSERVERSERVICEPERMSEC3256') || false;
-    users[socket.id] = { 
-        username: defaultUsername, 
-        defaultUsername, 
-        isAvailable: true, 
-        isAdmin,
+    users[socket.id] = {
+        username: defaultUsername,
+        defaultUsername,
+        isAvailable: true,
         role: null // Default to no special role
     };
 
@@ -56,6 +54,7 @@ io.on('connection', (socket) => {
             io.emit('update users', users);
         } else {
             console.log(`Invalid sign-in attempt by ${socket.id}.`);
+            socket.emit('sign in error', 'Invalid username or password'); // Notify the client
         }
     });
 
