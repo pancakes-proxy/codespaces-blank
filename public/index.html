@@ -4,48 +4,89 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Chatroom</title>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2596258669748338"
-     crossorigin="anonymous"></script>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2596258669748338" crossorigin="anonymous"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif; margin: 0; display: flex;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            display: flex;
         }
         #sidebar {
-            width: 20%; background: #f0f0f0; padding: 10px; border-right: 1px solid #ddd;
+            width: 20%;
+            background: #f0f0f0;
+            padding: 10px;
+            border-right: 1px solid #ddd;
         }
         #chat-container {
-            width: 80%; padding: 20px;
+            width: 80%;
+            padding: 20px;
         }
         ul {
-            list-style-type: none; padding: 0;
+            list-style-type: none;
+            padding: 0;
         }
         li {
             margin: 5px 0;
         }
         #messages {
-            max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
             background-color: #f9f9f9;
         }
-        #message-input, #username-input, #signin-username, #signin-password {
-            width: 70%; margin-right: 5px; padding: 5px;
+        #message-input, #username-input {
+            width: 70%;
+            margin-right: 5px;
+            padding: 5px;
         }
-        #username-button, #send-button, #dm-button, #signin-button {
-            margin-top: 5px; padding: 5px 10px;
+        #username-button, #send-button, #dm-button, #open-signin {
+            margin-top: 5px;
+            padding: 5px 10px;
         }
         .server-owner {
-            color: red; font-weight: bold;
+            color: red;
+            font-weight: bold;
         }
         .developer {
-            color: blue; font-weight: bold;
+            color: blue;
+            font-weight: bold;
+        }
+        #signin-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            background-color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            z-index: 1000;
+        }
+        #modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 999;
         }
     </style>
 </head>
 <body>
+    <!-- Sidebar -->
     <div id="sidebar">
         <h3>Online Users</h3>
         <ul id="user-list"></ul>
     </div>
+
+    <!-- Main Chat Container -->
     <div id="chat-container">
         <h1>The Chatroom</h1>
         <ul id="messages"></ul>
@@ -59,18 +100,24 @@
         <input id="message-input" autocomplete="off" placeholder="Type your message...">
         <button id="send-button">Send</button>
 
-        <!-- Sign-In Form -->
-        <div id="sign-in">
-            <h3>Sign In</h3>
-            <input id="signin-username" type="text" placeholder="Username">
-            <input id="signin-password" type="password" placeholder="Password">
-            <button id="signin-button">Sign In</button>
-        </div>
+        <!-- Sign-In Button -->
+        <button id="open-signin" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; border-radius: 5px;">Sign In</button>
 
-        <!-- Private Chat Button -->
-        <button id="dm-button" disabled>Direct Message (not working will be fixed in 2.0)</button>
-
+        <!-- Direct Message Button -->
+        <button id="dm-button" disabled>Direct Message (Coming Soon)</button>
     </div>
+
+    <!-- Sign-In Modal -->
+    <div id="signin-modal">
+        <h3>Sign In</h3>
+        <input id="signin-username" type="text" placeholder="Username" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+        <input id="signin-password" type="password" placeholder="Password" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+        <button id="submit-signin" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; border-radius: 5px; width: 100%;">Submit</button>
+        <button id="close-signin" style="padding: 10px; background-color: #f44336; color: white; border: none; cursor: pointer; border-radius: 5px; width: 100%; margin-top: 10px;">Cancel</button>
+    </div>
+
+    <!-- Background Overlay -->
+    <div id="modal-overlay"></div>
 
     <script>
         const socket = io();
@@ -81,23 +128,52 @@
         const usernameButton = document.getElementById('username-button');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
-        const signinButton = document.getElementById('signin-button');
+        const openSignInButton = document.getElementById('open-signin');
+        const modalOverlay = document.getElementById('modal-overlay');
+        const signinModal = document.getElementById('signin-modal');
+        const closeSignInButton = document.getElementById('close-signin');
+        const submitSignInButton = document.getElementById('submit-signin');
         const signinUsername = document.getElementById('signin-username');
         const signinPassword = document.getElementById('signin-password');
         const dmButton = document.getElementById('dm-button');
 
-        let selectedUserId = null;
+        // Show the modal
+        openSignInButton.addEventListener('click', () => {
+            signinModal.style.display = 'block';
+            modalOverlay.style.display = 'block';
+        });
 
-        // Handle User Sign-In
-        signinButton.addEventListener('click', () => {
+        // Close the modal
+        closeSignInButton.addEventListener('click', () => {
+            signinModal.style.display = 'none';
+            modalOverlay.style.display = 'none';
+        });
+
+        modalOverlay.addEventListener('click', () => {
+            signinModal.style.display = 'none';
+            modalOverlay.style.display = 'none';
+        });
+
+        // Handle Sign-In
+        submitSignInButton.addEventListener('click', () => {
             const username = signinUsername.value.trim();
             const password = signinPassword.value.trim();
 
             if (username && password) {
                 socket.emit('sign in', { username, password });
+
                 signinUsername.value = '';
                 signinPassword.value = '';
+                signinModal.style.display = 'none';
+                modalOverlay.style.display = 'none';
+            } else {
+                alert('Please fill in both fields.');
             }
+        });
+
+        // Handle sign-in error
+        socket.on('sign in error', (error) => {
+            alert(error);
         });
 
         // Update the User List
@@ -112,12 +188,6 @@
                 } else if (user.role === 'Developer') {
                     item.classList.add('developer');
                 }
-
-                // Handle selecting a user for DM
-                item.addEventListener('click', () => {
-                    selectedUserId = id;
-                    dmButton.disabled = false;
-                });
 
                 userList.appendChild(item);
             }
@@ -146,50 +216,23 @@
             const item = document.createElement('li');
             if (msg.role === 'Server Owner') {
                 item.style.color = 'red';
-                item.textContent = `[Staff] ${msg.username}: ${msg.text}`;
+                item.textContent = `[${msg.role}] ${msg.username}: ${msg.text}`;
             } else if (msg.role === 'Developer') {
                 item.style.color = 'blue';
-                item.textContent = `[Staff] ${msg.username}: ${msg.text}`;
+                item.textContent = `[${msg.role}] ${msg.username}: ${msg.text}`;
             } else {
                 item.textContent = `${msg.username}: ${msg.text}`;
             }
             messages.appendChild(item);
         });
-
-        // Handle DM Button Click
-        dmButton.addEventListener('click', () => {
-            if (selectedUserId) {
-                socket.emit('request dm', selectedUserId);
-            }
-        });
-
-        // Handle DM Requests
-        socket.on('dm request', ({ from, roomId }) => {
-            if (confirm('You have a DM request. Would you like to accept it?')) {
-                socket.emit('accept dm', roomId);
-                window.location.href = `/${roomId}`;
-            }
-        });
-
-        // Handle DM Redirection
-        socket.on('redirect dm', (roomId) => {
-            window.location.href = `/${roomId}`;
-        });
     </script>
-    <h4>made by learnhelp.cc dev team and pancakes</h4>
-    <p>version 1.7.97H</p>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2596258669748338"
-     crossorigin="anonymous"></script>
-<!-- Ad -->
-<ins class="adsbygoogle"
-     style="display:block"
-     data-ad-client="ca-pub-2596258669748338"
-     data-ad-slot="2234630726"
-     data-ad-format="auto"
-     data-full-width-responsive="true"></ins>
-<script>
-     (adsbygoogle = window.adsbygoogle || []).push({});
-</script>
+
+    <h4>Made by learnhelp.cc dev team and pancakes</h4>
+    <p>Version 1.7.97H</p>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2596258669748338" crossorigin="anonymous"></script>
+    <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-2596258669748338" data-ad-slot="2234630726" data-ad-format="auto" data-full-width-responsive="true"></ins>
+    <script>
+        (adsbygoogle = window.adsbygoogle || []).push({});
+    </script>
 </body>
 </html>
-
