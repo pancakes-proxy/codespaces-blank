@@ -216,10 +216,10 @@
             const item = document.createElement('li');
             if (msg.role === 'Server Owner') {
                 item.style.color = 'red';
-                item.textContent = `[${msg.role}] ${msg.username}: ${msg.text}`;
+                item.textContent = `[Staff] ${msg.username}: ${msg.text}`;
             } else if (msg.role === 'Developer') {
                 item.style.color = 'blue';
-                item.textContent = `[${msg.role}] ${msg.username}: ${msg.text}`;
+                item.textContent = `[Staff] ${msg.username}: ${msg.text}`;
             } else {
                 item.textContent = `${msg.username}: ${msg.text}`;
             }
