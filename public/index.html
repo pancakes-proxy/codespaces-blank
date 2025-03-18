@@ -89,6 +89,8 @@
         <label for="server-select">Select Server:</label>
         <select id="server-select"></select>
         <button id="create-server-button">Create Server</button>
+        <button id="username-button">Set Username</button>
+        <button id="open-signin">Sign In</button>
     </div>
 
     <div id="main">
@@ -109,20 +111,36 @@
         </div>
     </div>
 
+    <!-- Sign-In Modal -->
+    <div id="signin-modal" style="display: none;">
+        <h3>Sign In</h3>
+        <input id="signin-username" type="text" placeholder="Username">
+        <input id="signin-password" type="password" placeholder="Password">
+        <button id="submit-signin">Submit</button>
+        <button id="close-signin">Cancel</button>
+    </div>
+
     <script>
         const socket = io();
 
         const serverSelect = document.getElementById('server-select');
         const createServerButton = document.getElementById('create-server-button');
+        const usernameButton = document.getElementById('username-button');
+        const openSignInButton = document.getElementById('open-signin');
         const userList = document.getElementById('user-list');
         const messages = document.getElementById('messages');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
+        const signinModal = document.getElementById('signin-modal');
+        const submitSignInButton = document.getElementById('submit-signin');
+        const closeSignInButton = document.getElementById('close-signin');
+        const signinUsername = document.getElementById('signin-username');
+        const signinPassword = document.getElementById('signin-password');
         let currentServer = null;
 
-        // Fetch server list and update dropdown
+        // Update the server dropdown
         socket.on('update servers', (servers) => {
-            serverSelect.innerHTML = ''; // Clear existing options
+            serverSelect.innerHTML = '';
             servers.forEach((server) => {
                 const option = document.createElement('option');
                 option.value = server;
@@ -131,7 +149,7 @@
             });
         });
 
-        // Join the selected server
+        // Join a server
         serverSelect.addEventListener('change', () => {
             const selectedServer = serverSelect.value;
             if (selectedServer) {
@@ -140,22 +158,48 @@
             }
         });
 
-        // Handle creating a new server
+        // Create a new server
         createServerButton.addEventListener('click', () => {
-            const serverName = prompt('Enter a name for your server:');
+            const serverName = prompt('Enter a name for your new server:');
             if (serverName) {
                 socket.emit('create server', serverName);
             }
         });
 
-        // Handle server joined event
-        socket.on('server joined', (serverName) => {
-            console.log(`Joined server: ${serverName}`);
-            currentServer = serverName;
-            messages.innerHTML = ''; // Clear chat messages
+        // Open the sign-in modal
+        openSignInButton.addEventListener('click', () => {
+            signinModal.style.display = 'block';
         });
 
-        // Update the user list when server updates
+        // Close the sign-in modal
+        closeSignInButton.addEventListener('click', () => {
+            signinModal.style.display = 'none';
+        });
+
+        // Submit sign-in credentials
+        submitSignInButton.addEventListener('click', () => {
+            const username = signinUsername.value.trim();
+            const password = signinPassword.value.trim();
+
+            if (username && password) {
+                socket.emit('sign in', { username, password });
+                signinModal.style.display = 'none';
+                signinUsername.value = '';
+                signinPassword.value = '';
+            } else {
+                alert('Please fill out both fields.');
+            }
+        });
+
+        // Handle setting a username
+        usernameButton.addEventListener('click', () => {
+            const newUsername = prompt('Enter your username:');
+            if (newUsername) {
+                socket.emit('set username', newUsername);
+            }
+        });
+
+        // Display users in the server
         socket.on('update server users', ({ serverName, users }) => {
             if (serverName === currentServer) {
                 userList.innerHTML = '';
@@ -172,7 +216,7 @@
             }
         });
 
-        // Handle new messages
+        // Add new messages to chat
         socket.on('new message', ({ serverName, chatroom, message }) => {
             if (serverName === currentServer) {
                 const li = document.createElement('li');
@@ -181,7 +225,7 @@
             }
         });
 
-        // Send messages to the current server and chatroom
+        // Send a message
         sendButton.addEventListener('click', () => {
             const message = messageInput.value.trim();
             if (message && currentServer) {
