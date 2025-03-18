@@ -19,10 +19,12 @@ const privateChats = {}; // { roomId: [socketId1, socketId2] }
 
 // Special user sign-in credentials
 const SPECIAL_USERS = [
-    { username: 'zac', password: 'zaxc1122', role: 'Server Owner' },
+    { username: 'zac :D', password: 'zaxc1122', role: 'Server Owner' },
     { username: 'lily', password: 'lily1', role: 'Developer' },
-    { username: 'izzy', password: 'izzy', role: 'Developer' },
-    { username: 'JW', password: 'JW', role: 'Developer' }
+    { username: 'izzy', password: 'izzy', role: 'Server Owner' },
+    { username: 'JW', password: 'JW', role: 'Developer' },
+    { username: 'issac', password: 'issac1', role: 'Server Owner' },
+    { username: 'Milly<3', password: 'milly', role: 'Developer' },
 ];
 
 // Handle connections
