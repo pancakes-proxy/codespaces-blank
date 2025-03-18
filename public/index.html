@@ -4,23 +4,51 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Chatroom</title>
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2596258669748338" crossorigin="anonymous"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 0;
             display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #server-bar {
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #server-bar select {
+            padding: 5px;
+            font-size: 14px;
+        }
+        #server-bar button {
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        #main {
+            display: flex;
+            flex: 1;
         }
         #sidebar {
             width: 20%;
             background: #f0f0f0;
             padding: 10px;
             border-right: 1px solid #ddd;
+            overflow-y: auto;
         }
         #chat-container {
-            width: 80%;
+            flex: 1;
             padding: 20px;
+            display: flex;
+            flex-direction: column;
         }
         ul {
             list-style-type: none;
@@ -30,20 +58,19 @@
             margin: 5px 0;
         }
         #messages {
-            max-height: 300px;
+            flex: 1;
             overflow-y: auto;
             border: 1px solid #ddd;
             padding: 10px;
             margin-bottom: 10px;
             background-color: #f9f9f9;
         }
-        #message-input, #username-input {
-            width: 70%;
-            margin-right: 5px;
+        #message-input {
+            width: calc(100% - 80px);
             padding: 5px;
+            margin-right: 5px;
         }
-        #username-button, #send-button, #dm-button, #open-signin {
-            margin-top: 5px;
+        #send-button {
             padding: 5px 10px;
         }
         .server-owner {
@@ -54,185 +81,114 @@
             color: blue;
             font-weight: bold;
         }
-        #signin-modal {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 300px;
-            background-color: white;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            border-radius: 10px;
-            padding: 20px;
-            z-index: 1000;
-        }
-        #modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 999;
-        }
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
-    <div id="sidebar">
-        <h3>Online Users</h3>
-        <ul id="user-list"></ul>
+    <!-- Server Selection Bar -->
+    <div id="server-bar">
+        <label for="server-select">Select Server:</label>
+        <select id="server-select"></select>
+        <button id="create-server-button">Create Server</button>
     </div>
 
-    <!-- Main Chat Container -->
-    <div id="chat-container">
-        <h1>The Chatroom</h1>
-        <ul id="messages"></ul>
+    <div id="main">
+        <!-- Sidebar for Users -->
+        <div id="sidebar">
+            <h3>Online Users</h3>
+            <ul id="user-list"></ul>
+        </div>
 
-        <!-- Username Input -->
-        <input id="username-input" placeholder="Set your username..." autocomplete="off">
-        <button id="username-button">Set Username</button>
-        <br>
-
-        <!-- Chat Input -->
-        <input id="message-input" autocomplete="off" placeholder="Type your message...">
-        <button id="send-button">Send</button>
-
-        <!-- Sign-In Button -->
-        <button id="open-signin" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; border-radius: 5px;">Sign In</button>
-
-        <!-- Direct Message Button -->
-        <button id="dm-button" disabled>Direct Message (Coming Soon)</button>
+        <!-- Chat Container -->
+        <div id="chat-container">
+            <h1>Chat</h1>
+            <ul id="messages"></ul>
+            <div style="display: flex;">
+                <input id="message-input" placeholder="Type your message..." autocomplete="off">
+                <button id="send-button">Send</button>
+            </div>
+        </div>
     </div>
-
-    <!-- Sign-In Modal -->
-    <div id="signin-modal">
-        <h3>Sign In</h3>
-        <input id="signin-username" type="text" placeholder="Username" style="width: 100%; padding: 8px; margin-bottom: 10px;">
-        <input id="signin-password" type="password" placeholder="Password" style="width: 100%; padding: 8px; margin-bottom: 10px;">
-        <button id="submit-signin" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; border-radius: 5px; width: 100%;">Submit</button>
-        <button id="close-signin" style="padding: 10px; background-color: #f44336; color: white; border: none; cursor: pointer; border-radius: 5px; width: 100%; margin-top: 10px;">Cancel</button>
-    </div>
-
-    <!-- Background Overlay -->
-    <div id="modal-overlay"></div>
 
     <script>
         const socket = io();
 
-        const messages = document.getElementById('messages');
+        const serverSelect = document.getElementById('server-select');
+        const createServerButton = document.getElementById('create-server-button');
         const userList = document.getElementById('user-list');
-        const usernameInput = document.getElementById('username-input');
-        const usernameButton = document.getElementById('username-button');
+        const messages = document.getElementById('messages');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
-        const openSignInButton = document.getElementById('open-signin');
-        const modalOverlay = document.getElementById('modal-overlay');
-        const signinModal = document.getElementById('signin-modal');
-        const closeSignInButton = document.getElementById('close-signin');
-        const submitSignInButton = document.getElementById('submit-signin');
-        const signinUsername = document.getElementById('signin-username');
-        const signinPassword = document.getElementById('signin-password');
-        const dmButton = document.getElementById('dm-button');
+        let currentServer = null;
 
-        // Show the modal
-        openSignInButton.addEventListener('click', () => {
-            signinModal.style.display = 'block';
-            modalOverlay.style.display = 'block';
+        // Fetch server list and update dropdown
+        socket.on('update servers', (servers) => {
+            serverSelect.innerHTML = ''; // Clear existing options
+            servers.forEach((server) => {
+                const option = document.createElement('option');
+                option.value = server;
+                option.textContent = server;
+                serverSelect.appendChild(option);
+            });
         });
 
-        // Close the modal
-        closeSignInButton.addEventListener('click', () => {
-            signinModal.style.display = 'none';
-            modalOverlay.style.display = 'none';
-        });
-
-        modalOverlay.addEventListener('click', () => {
-            signinModal.style.display = 'none';
-            modalOverlay.style.display = 'none';
-        });
-
-        // Handle Sign-In
-        submitSignInButton.addEventListener('click', () => {
-            const username = signinUsername.value.trim();
-            const password = signinPassword.value.trim();
-
-            if (username && password) {
-                socket.emit('sign in', { username, password });
-
-                signinUsername.value = '';
-                signinPassword.value = '';
-                signinModal.style.display = 'none';
-                modalOverlay.style.display = 'none';
-            } else {
-                alert('Please fill in both fields.');
+        // Join the selected server
+        serverSelect.addEventListener('change', () => {
+            const selectedServer = serverSelect.value;
+            if (selectedServer) {
+                socket.emit('join server', selectedServer);
+                currentServer = selectedServer;
             }
         });
 
-        // Handle sign-in error
-        socket.on('sign in error', (error) => {
-            alert(error);
-        });
-
-        // Update the User List
-        socket.on('update users', (users) => {
-            userList.innerHTML = '';
-            for (const [id, user] of Object.entries(users)) {
-                const item = document.createElement('li');
-                item.textContent = user.username;
-
-                if (user.role === 'Server Owner') {
-                    item.classList.add('server-owner');
-                } else if (user.role === 'Developer') {
-                    item.classList.add('developer');
-                }
-
-                userList.appendChild(item);
+        // Handle creating a new server
+        createServerButton.addEventListener('click', () => {
+            const serverName = prompt('Enter a name for your server:');
+            if (serverName) {
+                socket.emit('create server', serverName);
             }
         });
 
-        // Handle Username Updates
-        usernameButton.addEventListener('click', () => {
-            const newUsername = usernameInput.value.trim();
-            if (newUsername) {
-                socket.emit('set username', newUsername);
-                usernameInput.value = '';
+        // Handle server joined event
+        socket.on('server joined', (serverName) => {
+            console.log(`Joined server: ${serverName}`);
+            currentServer = serverName;
+            messages.innerHTML = ''; // Clear chat messages
+        });
+
+        // Update the user list when server updates
+        socket.on('update server users', ({ serverName, users }) => {
+            if (serverName === currentServer) {
+                userList.innerHTML = '';
+                users.forEach((user) => {
+                    const li = document.createElement('li');
+                    li.textContent = user.username;
+                    if (user.role === 'Server Owner') {
+                        li.classList.add('server-owner');
+                    } else if (user.role === 'Developer') {
+                        li.classList.add('developer');
+                    }
+                    userList.appendChild(li);
+                });
             }
         });
 
-        // Send General Chat Messages
+        // Handle new messages
+        socket.on('new message', ({ serverName, chatroom, message }) => {
+            if (serverName === currentServer) {
+                const li = document.createElement('li');
+                li.textContent = `[${chatroom}] ${message.username}: ${message.text}`;
+                messages.appendChild(li);
+            }
+        });
+
+        // Send messages to the current server and chatroom
         sendButton.addEventListener('click', () => {
             const message = messageInput.value.trim();
-            if (message) {
-                socket.emit('chat message', message);
+            if (message && currentServer) {
+                socket.emit('send message', { serverName: currentServer, chatroom: 'general', message });
                 messageInput.value = '';
             }
         });
-
-        // Display Chat Messages
-        socket.on('chat message', (msg) => {
-            const item = document.createElement('li');
-            if (msg.role === 'Server Owner') {
-                item.style.color = 'red';
-                item.textContent = `[Staff] ${msg.username}: ${msg.text}`;
-            } else if (msg.role === 'Developer') {
-                item.style.color = 'blue';
-                item.textContent = `[Staff] ${msg.username}: ${msg.text}`;
-            } else {
-                item.textContent = `${msg.username}: ${msg.text}`;
-            }
-            messages.appendChild(item);
-        });
-    </script>
-
-    <h4>Made by learnhelp.cc dev team and pancakes</h4>
-    <p>Version 1.7.97H</p>
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2596258669748338" crossorigin="anonymous"></script>
-    <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-2596258669748338" data-ad-slot="2234630726" data-ad-format="auto" data-full-width-responsive="true"></ins>
-    <script>
-        (adsbygoogle = window.adsbygoogle || []).push({});
     </script>
 </body>
 </html>
