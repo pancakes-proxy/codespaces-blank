@@ -21,12 +21,11 @@
             align-items: center;
             gap: 10px;
         }
-        #server-bar select {
+        #server-bar select, #server-bar button {
             padding: 5px;
             font-size: 14px;
         }
         #server-bar button {
-            padding: 5px 10px;
             background-color: #4CAF50;
             color: white;
             border: none;
@@ -81,6 +80,29 @@
             color: blue;
             font-weight: bold;
         }
+        #signin-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            background-color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            z-index: 1000;
+        }
+        #modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
     </style>
 </head>
 <body>
@@ -112,7 +134,7 @@
     </div>
 
     <!-- Sign-In Modal -->
-    <div id="signin-modal" style="display: none;">
+    <div id="signin-modal">
         <h3>Sign In</h3>
         <input id="signin-username" type="text" placeholder="Username">
         <input id="signin-password" type="password" placeholder="Password">
@@ -138,7 +160,7 @@
         const signinPassword = document.getElementById('signin-password');
         let currentServer = null;
 
-        // Update the server dropdown
+        // Update server dropdown
         socket.on('update servers', (servers) => {
             serverSelect.innerHTML = '';
             servers.forEach((server) => {
@@ -166,17 +188,25 @@
             }
         });
 
-        // Open the sign-in modal
+        // Set username
+        usernameButton.addEventListener('click', () => {
+            const newUsername = prompt('Enter your username:');
+            if (newUsername) {
+                socket.emit('set username', newUsername);
+            }
+        });
+
+        // Open sign-in modal
         openSignInButton.addEventListener('click', () => {
             signinModal.style.display = 'block';
         });
 
-        // Close the sign-in modal
+        // Close sign-in modal
         closeSignInButton.addEventListener('click', () => {
             signinModal.style.display = 'none';
         });
 
-        // Submit sign-in credentials
+        // Submit sign-in
         submitSignInButton.addEventListener('click', () => {
             const username = signinUsername.value.trim();
             const password = signinPassword.value.trim();
@@ -191,15 +221,12 @@
             }
         });
 
-        // Handle setting a username
-        usernameButton.addEventListener('click', () => {
-            const newUsername = prompt('Enter your username:');
-            if (newUsername) {
-                socket.emit('set username', newUsername);
-            }
+        // Display sign-in error
+        socket.on('sign in error', (errorMessage) => {
+            alert(errorMessage);
         });
 
-        // Display users in the server
+        // Update server users
         socket.on('update server users', ({ serverName, users }) => {
             if (serverName === currentServer) {
                 userList.innerHTML = '';
@@ -225,7 +252,7 @@
             }
         });
 
-        // Send a message
+        // Send messages
         sendButton.addEventListener('click', () => {
             const message = messageInput.value.trim();
             if (message && currentServer) {
