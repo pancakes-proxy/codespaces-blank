@@ -98,7 +98,7 @@ class CustomCommandsCog(commands.Cog):
             f"{interaction.user.mention} punched {member.mention} [:3](https://tenor.com/cM5NrlugNQL.gif)"
         )
 
-    @app_commands.command(name="kick", description="Kick a user.")
+    @app_commands.command(name="roleplaykick", description="Kick a user.")
     async def kick(self, interaction: discord.Interaction, member: discord.Member):
         await interaction.response.send_message(
             f"{interaction.user.mention} kicked {member.mention} [:3](https://tenor.com/9q2k.gif)"
