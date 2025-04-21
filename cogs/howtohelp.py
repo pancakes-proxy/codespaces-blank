@@ -19,7 +19,7 @@ class HowToCog(commands.Cog):
             name="1. Fork the Repository",
             value=(
                 "Visit the repository and click **Fork** to create your own copy:\n"
-                "[GitHub Repository](https://github.com/pancakes-proxy/codespaces-blank.git)"
+                "[GitHub Repository](https://github.com/pancakes-proxy/wdiscordbot.git)"
             ),
             inline=False
         )
