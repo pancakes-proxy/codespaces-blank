@@ -77,8 +77,7 @@ class ModCog(commands.Cog):
     # --------------------------------------------------------------------------
     # Channel Lockdown Command
     # --------------------------------------------------------------------------
-    @commands.hybrid_command(name="chanlockdown", help="Lockdown a specific text channel by disabling send messages for @everyone. "
-                                                      "If no channel is provided, the current channel is used.")
+    @commands.hybrid_command(name="chanlockdown", help="Lockdown a specific text channel.")
     @commands.has_permissions(manage_channels=True)
     async def chanlockdown(self, ctx, channel: discord.TextChannel = None):
         channel = channel or ctx.channel

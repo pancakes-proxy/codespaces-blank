@@ -7,7 +7,7 @@ class HowToCog(commands.Cog):
 
     @commands.hybrid_command(
         name="howto",
-        help="Instructions on how to contribute: Fork the repo, clone, edit/make cogs, test, commit, and create a pull request."
+    description="How to contribute to the repository."
     )
     async def howto(self, ctx):
         embed = discord.Embed(
