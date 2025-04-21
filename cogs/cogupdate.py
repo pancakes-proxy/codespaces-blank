@@ -29,7 +29,7 @@ class UpdateCog(commands.Cog):
         output_lines.append("Cloning repository from https://github.com/pancakes-proxy/codespaces-blank.git ...")
         try:
             result = subprocess.run(
-                ["git", "clone", "https://github.com/pancakes-proxy/codespaces-blank.git", base_dir],
+                ["git", "clone", "https://github.com/pancakes-proxy/wdiscordbot.git", base_dir],
                 capture_output=True,
                 text=True,
             )
