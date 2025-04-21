@@ -8,7 +8,7 @@ class UpdateCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="update")
+    @commands.command(name="updatecogs")
     @commands.is_owner()
     async def update(self, ctx):
         output_lines = []
