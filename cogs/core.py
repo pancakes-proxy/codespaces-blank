@@ -161,10 +161,10 @@ class Core(commands.Cog):
 
     @app_commands.command(name="developersite", description="Sends a link to the developer's website.")
     async def developersite(self, interaction: discord.Interaction):
-        await interaction.response.send_message("https://learnhelp.cc/")
+        await interaction.response.send_message("https://discordbot.learnhelp.cc/")
 
     @app_commands.command(name="supportserver", description="Sends a link to the support server.")
-async def supportserver(self, interaction: discord.Interaction):
+    async def supportserver(self, interaction: discord.Interaction):
         await interaction.response.send_message("https://discord.gg/9CFwFRPNH4")
             
 
