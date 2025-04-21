@@ -29,9 +29,11 @@ async def load_cogs():
 
 @bot.event
 async def on_ready():
-    await bot.tree.sync()  # Sync slash commands after bot is ready
-    print(f"Logged in as {bot.user}")
-    print("Slash commands synced.")
+    try:
+        await bot.tree.sync()
+        print("Commands synced successfully!")
+    except Exception as e:
+        print(f"Failed to sync commands: {e}")
 
 async def main():
     async with bot:
