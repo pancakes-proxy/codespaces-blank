@@ -1,10 +1,15 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from enum import Enum
+import random
 
 class CustomCommandsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+class CoinSide(Enum):
+    HEADS = "heads"
+    TAILS = "tails"
 
 @app_commands.command(name="coinflip", description="Flip a coin by picking heads or tails.")
 async def coinflip(self, interaction: discord.Interaction, side: CoinSide):
