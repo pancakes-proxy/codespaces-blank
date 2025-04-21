@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 import asyncio
+from discord import app_commands
 
 # Load environment variables
 load_dotenv("/home/server/keys.env")
@@ -15,7 +16,8 @@ if not discord_token:
 # Configure bot with intents
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+
+bot = commands.Bot(command_prefix="/", intents=intents)
 
 # Load cog files dynamically
 async def load_cogs():
@@ -30,14 +32,16 @@ async def load_cogs():
 @bot.event
 async def on_ready():
     try:
-        await bot.tree.sync()
+        await bot.tree.sync()  # Sync commands globally or specify a guild if needed
         print("Commands synced successfully!")
     except Exception as e:
         print(f"Failed to sync commands: {e}")
+    print(f"Logged in as {bot.user}.")
 
 async def main():
     async with bot:
         await load_cogs()
         await bot.start(discord_token)
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
