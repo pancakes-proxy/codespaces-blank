@@ -109,7 +109,7 @@ class Core(commands.Cog):
         await interaction.response.send_message("Initiating update. The bot will restart shortly...")
         target_dir = "/home/server/wdiscordbot/"
         repo_url = "https://github.com/pancakes-proxy/wdiscordbot.git"
-        restart_script = "/home/server/wdiscordbot/cogtest1/bot.py"
+        restart_script = "/home/server/wdiscordbot/bot.py"
 
         try:
             if os.path.exists(target_dir):
