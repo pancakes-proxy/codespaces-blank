@@ -7,6 +7,34 @@ import random
 class CustomCommandsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+async def setup(bot):
+    cog = CustomCommandsCog(bot)
+    bot.tree.add_command(coinflip)
+    bot.tree.add_command(wave)
+    bot.tree.add_command(swisschesse)
+    bot.tree.add_command(diddle)
+    bot.tree.add_command(publicexecution)
+    bot.tree.add_command(deport)
+    bot.tree.add_command(snatch)
+    bot.tree.add_command(caughtlacking)
+    bot.tree.add_command(slap)
+    bot.tree.add_command(triplebaka)
+    bot.tree.add_command(spotify)
+    bot.tree.add_command(hug)
+    bot.tree.add_command(kiss)
+    bot.tree.add_command(punch)
+    bot.tree.add_command(kick)
+    bot.tree.add_command(banhammer)
+    bot.tree.add_command(rps)
+    bot.tree.add_command(marry)
+    bot.tree.add_command(divorce)
+    bot.tree.add_command(slay)
+    await bot.add_cog(cog)
+    await bot.tree.sync()
+    
+    def __init__(self, bot):
+        self.bot = bot
 class CoinSide(Enum):
     HEADS = "heads"
     TAILS = "tails"
