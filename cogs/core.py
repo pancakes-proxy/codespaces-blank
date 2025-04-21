@@ -98,6 +98,7 @@ class Core(commands.Cog):
         embed.add_field(name="Powered By", value="OpenAI, Discord API", inline=False)
         embed.add_field(name="Website", value="https://discordbot.learnhelp.cc", inline=False)
         embed.add_field(name="Discord Server", value="https://discord.gg/9CFwFRPNH4", inline=False)
+        embed.add_field(name="GitHub", value="https://github.com/pancakes-proxy/wdiscordbot", inline=False)
         embed.set_footer(text="Thank you for using the bot!")
         await interaction.response.send_message(embed=embed)
 
