@@ -36,7 +36,7 @@ async def on_ready():
         print("Commands synced successfully!")
     except Exception as e:
         print(f"Failed to sync commands: {e}")
-    print(f"Logged in as {bot.user}.")
+    print(f"Logged in as {bot.user}")
 
 async def main():
     async with bot:
