@@ -13,19 +13,19 @@
       font-family: Arial, sans-serif;
       line-height: 1.6;
       margin: 0;
-      padding: 0 20px;
-      background-color: #d3d3d3; /* Light grey background */
+      padding: 0; /* Remove extra padding to let navbar span full width */
+      background-color: #d3d3d3; /* Light grey (fallback) background */
     }
-    header, footer {
-      background-color: #333;
-      color: #fff;
-      padding: 20px 10px;
-      text-align: center;
+    /* Particle background container */
+    #particles-js {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
     }
-    header h1, footer p {
-      margin: 0;
-    }
-    /* Translucent Navbar */
+    /* Translucent Navbar that spans full width */
     .navbar {
       position: fixed;
       top: 0;
@@ -36,6 +36,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      box-sizing: border-box;
       z-index: 1000;
     }
     .navbar a {
@@ -52,12 +53,28 @@
       display: flex;
       gap: 15px;
     }
-    /* Main Content */
+    /* Acrylic effect for header, main, and footer */
+    header, main, footer {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    /* Header appears below the fixed navbar */
+    header {
+      margin-top: 80px; /* Offset height for navbar */
+      text-align: center;
+      padding: 20px 0;
+    }
+    header h1 {
+      margin: 0;
+    }
+    /* Main content styling with acrylic effect */
     main {
-      background: #fff;
+      background: rgba(255, 255, 255, 0.8);
       padding: 20px;
-      margin-top: 80px; /* Offset for fixed navbar */
-      border: 1px solid #ddd;
+      margin: 20px;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      border-radius: 10px;
     }
     section {
       margin-bottom: 30px;
@@ -70,10 +87,21 @@
       white-space: pre-wrap;
       margin: 10px 0;
       font-family: Consolas, "Courier New", monospace;
+      border-radius: 4px;
+    }
+    /* Footer styling with acrylic effect */
+    footer {
+      background: rgba(51, 51, 51, 0.8);
+      color: #fff;
+      padding: 20px 10px;
+      text-align: center;
     }
   </style>
 </head>
 <body>
+
+  <!-- Particle Effect Background -->
+  <div id="particles-js"></div>
 
   <!-- Navbar -->
   <div class="navbar">
@@ -91,11 +119,13 @@
     </div>
   </div>
 
+  <!-- Title Header -->
   <header>
     <h1>WDiscordBot Modding Wiki</h1>
     <p><em>Last Updated: April 2025</em></p>
   </header>
 
+  <!-- Main Content -->
   <main>
     <section id="introduction">
       <h2>Introduction</h2>
@@ -161,7 +191,7 @@
         To add new features, create a new cog file, following this template:
       </p>
       <pre>
-# File: cogs/custommod.py
+// File: cogs/custommod.py
 
 from discord.ext import commands
 
@@ -197,13 +227,13 @@ def setup(bot):
         <li><strong>Fork the Repository:</strong> Click on the "Fork" button in the GitHub repository to create your copy.</li>
         <li><strong>Clone Your Fork:</strong> Use <code>git clone &lt;your-repo-url&gt;</code> to download your fork locally.</li>
         <li><strong>Create a Branch:</strong> Always create a new branch for your changes, using a clear and descriptive name.</li>
-        <li><strong>Implement Your Changes:</strong> Follow the project's coding guidelines and update documentation where necessary. Don't forget to add tests to cover new functionality.</li>
+        <li><strong>Implement Your Changes:</strong> Follow the project's coding guidelines and update documentation where necessary. Don't forget to add tests for any new functionality.</li>
         <li><strong>Submit a Pull Request:</strong> Once your changes pass local testing, submit a pull request to the main repository with a detailed explanation of your modifications.</li>
-        <li><strong>Participate in Code Review:</strong> Engage in discussions, address feedback, and make adjustments as needed.</li>
-        <li><strong>Stay Synchronized:</strong> Regularly update your fork and branch with changes from the upstream repository to avoid merge conflicts.</li>
+        <li><strong>Participate in Code Review:</strong> Engage in discussions, address feedback, and adjust your changes as needed.</li>
+        <li><strong>Stay Synchronized:</strong> Regularly pull updates from the upstream repository to keep your fork up-to-date and avoid merge conflicts.</li>
       </ul>
       <p>
-        For any questions or further guidance, join our Discord community or refer to the repository's issue tracker.
+        For questions or further guidance, join our Discord community or refer to the repository's issue tracker.
       </p>
     </section>
 
@@ -219,5 +249,98 @@ def setup(bot):
     <p>© 2025 WDiscordBot - All Rights Reserved.</p>
   </footer>
 
+  <!-- Load Particles.js Library -->
+  <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+  <!-- Initialize Particle Effect -->
+  <script>
+    particlesJS("particles-js", {
+      "particles": {
+        "number": {
+          "value": 80,
+          "density": {
+            "enable": true,
+            "value_area": 800
+          }
+        },
+        "color": {
+          "value": "#ffffff"
+        },
+        "shape": {
+          "type": "circle",
+          "stroke": {
+            "width": 0,
+            "color": "#000000"
+          },
+          "polygon": {
+            "nb_sides": 5
+          }
+        },
+        "opacity": {
+          "value": 0.5,
+          "random": false
+        },
+        "size": {
+          "value": 3,
+          "random": true
+        },
+        "line_linked": {
+          "enable": true,
+          "distance": 150,
+          "color": "#ffffff",
+          "opacity": 0.4,
+          "width": 1
+        },
+        "move": {
+          "enable": true,
+          "speed": 6,
+          "direction": "none",
+          "random": false,
+          "straight": false,
+          "out_mode": "out",
+          "bounce": false
+        }
+      },
+      "interactivity": {
+        "detect_on": "canvas",
+        "events": {
+          "onhover": {
+            "enable": true,
+            "mode": "repulse"
+          },
+          "onclick": {
+            "enable": true,
+            "mode": "push"
+          },
+          "resize": true
+        },
+        "modes": {
+          "grab": {
+            "distance": 400,
+            "line_linked": {
+              "opacity": 1
+            }
+          },
+          "bubble": {
+            "distance": 400,
+            "size": 40,
+            "duration": 2,
+            "opacity": 8,
+            "speed": 3
+          },
+          "repulse": {
+            "distance": 200,
+            "duration": 0.4
+          },
+          "push": {
+            "particles_nb": 4
+          },
+          "remove": {
+            "particles_nb": 2
+          }
+        }
+      },
+      "retina_detect": true
+    });
+  </script>
 </body>
 </html>
