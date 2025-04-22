@@ -1,5 +1,5 @@
-# Security Policy for [Your Discord Bot Name]
-**Effective Date:** [Insert Date]
+# Security Policy for wdiscordbot
+**Effective Date:** 23/4/2025 at 4:38 AM JST
 
 To ensure the security and integrity of our Discord bot, we have established the following policies.
 
