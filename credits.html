@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Credits - WDiscordBot</title>
+  <title>Roles - WDiscordBot</title>
   <style>
     /* Enable smooth scrolling */
     html {
@@ -12,15 +12,10 @@
     body {
       font-family: Arial, sans-serif;
       text-align: center;
-      background-color: #d3d3d3;
+      background-color: #000; /* Pure black background */
       margin: 0;
-      padding: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      flex-direction: column;
-      overflow: hidden;
+      padding: 20px 0;
+      /* Removed flex and overflow properties to allow natural scrolling */
     }
     /* Particle background */
     #particles-js {
@@ -33,7 +28,7 @@
     }
     /* Acrylic-style role card */
     .role-card {
-      background: rgba(0, 0, 0, 0.2);
+      background: rgba(255, 255, 255, 0.2);
       backdrop-filter: blur(15px);
       -webkit-backdrop-filter: blur(15px);
       padding: 20px;
@@ -43,15 +38,23 @@
       opacity: 0;
       transform: scale(0.9);
       transition: opacity 1s ease-out, transform 1s ease-out;
-      margin: 10px;
+      margin: 20px auto;
     }
     .role-card h2 {
       font-size: 24px;
       color: #fff;
+      margin: 0 0 10px;
     }
     .role-card p {
       font-size: 18px;
       color: #ddd;
+      margin: 0;
+    }
+    /* Container to hold all cards */
+    .cards-container {
+      max-width: 400px;
+      margin: 0 auto;
+      padding-bottom: 40px;
     }
   </style>
 </head>
@@ -60,35 +63,43 @@
   <!-- Particle Background -->
   <div id="particles-js"></div>
 
-  <div class="role-card" id="developer-1">
-    <h2>Developer</h2>
-    <p>Zacarias Posey</p>
-  </div>
-
-  <div class="role-card" id="developer-2">
-    <h2>Developer</h2>
-    <p>Izzy Perez</p>
-  </div>
-
-  <div class="role-card" id="developer-3">
-    <h2>Developer</h2>
-    <p>Milly</p>
-  </div>
-
-  <div class="role-card" id="tester">
-    <h2>Auditor / Tester</h2>
-    <p>JW</p>
-  </div>
-
+  <!-- Cards Container -->
+  <div class="cards-container">
+    <!-- Special Thanks -->
     <div class="role-card" id="special-thanks">
-    <h2>Special Thanks</h2>
-    <p>Slipstream</p>
+      <h2>Special Thanks</h2>
+      <p>Slipstream</p>
+    </div>
+
+    <!-- Developer Role (Primary) -->
+    <div class="role-card" id="developer-1">
+      <h2>Developer</h2>
+      <p>Zacarias Posey</p>
+    </div>
+
+    <!-- Developer Role (Secondary) -->
+    <div class="role-card" id="developer-2">
+      <h2>Developer</h2>
+      <p>Izzy Perez</p>
+    </div>
+
+    <!-- Developer Role (Third) -->
+    <div class="role-card" id="developer-3">
+      <h2>Developer</h2>
+      <p>Milly</p>
+    </div>
+
+    <!-- Auditor/Tester Role -->
+    <div class="role-card" id="tester">
+      <h2>Auditor / Tester</h2>
+      <p>JW</p>
+    </div>
   </div>
 
   <!-- Particle.js Script -->
   <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
   
-  <!-- Initialize Particle Effect -->
+  <!-- Initialize Particle Effect and Animate Cards -->
   <script>
     particlesJS("particles-js", {
       "particles": {
@@ -145,10 +156,9 @@
         setTimeout(() => {
           card.style.opacity = "1";
           card.style.transform = "scale(1)";
-        }, index * 400); // Staggered animation
+        }, index * 400); // Staggered animation delay
       });
     };
   </script>
-
 </body>
 </html>
