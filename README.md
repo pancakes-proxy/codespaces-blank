@@ -1,4 +1,4 @@
-# WDiscordBot Modding Wiki
+# WDiscordBot
 
 *Last Updated: April 2025*
 
