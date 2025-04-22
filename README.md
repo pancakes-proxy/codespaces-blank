@@ -5,15 +5,15 @@
 ---
 
 ## Table of Contents
-1. [Introduction](#introduction)
-2. [Understanding the Cog System](#understanding-the-cog-system)
-3. [Directory Structure and Core Components](#directory-structure-and-core-components)
-4. [Guidelines for Modding Cogs](#guidelines-for-modding-cogs)
-5. [Files to Avoid Editing](#files-to-avoid-editing)
-6. [Creating and Integrating New Cogs](#creating-and-integrating-new-cogs)
-7. [Testing and Debugging Your Mods](#testing-and-debugging-your-mods)
-8. [Contributing](#contributing)
-9. [Conclusion](#conclusion)
+1. [Introduction(
+2. [Understanding the Cog System
+3. [Directory Structure and Core Components
+4. [Guidelines for Modding Cogs
+5. [Files to Avoid Editing
+6. [Creating and Integrating New Cogs
+7. [Testing and Debugging Your Mods
+8. [Contributing
+9. [Conclusion
 
 ---
 
