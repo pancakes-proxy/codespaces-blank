@@ -146,17 +146,25 @@
       <pre>
 /project-root
 │
-├── cogs/
-│   ├── core.py           // DO NOT MODIFY
-│   ├── debug.py          // DO NOT MODIFY
-│   ├── debug2.py         // DO NOT MODIFY
-│   ├── cog2.py           // DO NOT MODIFY
-│   ├── cogupdate.py      // DO NOT MODIFY
-│   ├── custommod.py      // Safe to modify
-│   └── other-cogs
+├──cogs
+├── ai.py
+├── application.py
+├── automod.py
+├── cog2.py
+├── cogupdate.py
+├── contribute.py
+├── core.py
+├── debug2.py
+├── fun.py
+├── howtohelp.py
+├── issues.py
+├── mod.py
+├── rolemgt.py
+├── roleplay.py
+|── rule34.py
 │
-├── main.py               // Main bot loader
-└── requirements.txt      // Dependencies
+├── bot.py               // Main bot loader
+        (ignore the rest thats just the readme and the website code)
       </pre>
     </section>
 
@@ -191,7 +199,7 @@
         To add new features, create a new cog file, following this template:
       </p>
       <pre>
-// File: cogs/custommod.py
+// File: cogs/demo.py
 
 from discord.ext import commands
 
