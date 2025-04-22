@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WDiscordBot Modding Wiki</title>
+  <style>
+    /* Enable smooth scrolling for anchor links */
+    html {
+      scroll-behavior: smooth;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0 20px;
+      background-color: #d3d3d3; /* Light grey background */
+    }
+    header, footer {
+      background-color: #333;
+      color: #fff;
+      padding: 20px 10px;
+      text-align: center;
+    }
+    header h1, footer p {
+      margin: 0;
+    }
+    /* Translucent Navbar */
+    .navbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      background-color: rgba(0, 0, 0, 0.7); /* Translucent */
+      padding: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 1000;
+    }
+    .navbar a {
+      color: #fff;
+      text-decoration: none;
+      padding: 10px 15px;
+      font-size: 18px;
+    }
+    .navbar a:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 5px;
+    }
+    .nav-links {
+      display: flex;
+      gap: 15px;
+    }
+    /* Main Content */
+    main {
+      background: #fff;
+      padding: 20px;
+      margin-top: 80px; /* Offset for fixed navbar */
+      border: 1px solid #ddd;
+    }
+    section {
+      margin-bottom: 30px;
+    }
+    pre, code {
+      background-color: #eee;
+      padding: 10px;
+      overflow: auto;
+      display: block;
+      white-space: pre-wrap;
+      margin: 10px 0;
+      font-family: Consolas, "Courier New", monospace;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <div class="navbar">
+    <a href="https://discordbot.learnhelp.cc" target="_blank">Home</a>
+    <div class="nav-links">
+      <a href="#introduction">Introduction</a>
+      <a href="#cog-system">Cog System</a>
+      <a href="#directory-structure">Structure</a>
+      <a href="#guidelines">Guidelines</a>
+      <a href="#files-to-avoid">Files to Avoid</a>
+      <a href="#creating-cogs">Creating Cogs</a>
+      <a href="#testing">Testing</a>
+      <a href="#contributing">Contributing</a>
+      <a href="#conclusion">Conclusion</a>
+    </div>
+  </div>
+
+  <header>
+    <h1>WDiscordBot Modding Wiki</h1>
+    <p><em>Last Updated: April 2025</em></p>
+  </header>
+
+  <main>
+    <section id="introduction">
+      <h2>Introduction</h2>
+      <p>
+        WDiscordBot is an open-source bot designed for customization. This guide explains how to safely modify its features while preserving critical functionality.
+      </p>
+    </section>
+
+    <section id="cog-system">
+      <h2>Understanding the Cog System</h2>
+      <p>
+        The cog system allows modular bot functionality by separating commands, event listeners, and utilities into isolated components.
+      </p>
+    </section>
+
+    <section id="directory-structure">
+      <h2>Directory Structure and Core Components</h2>
+      <pre>
+/project-root
+│
+├── cogs/
+│   ├── core.py           // DO NOT MODIFY
+│   ├── debug.py          // DO NOT MODIFY
+│   ├── debug2.py         // DO NOT MODIFY
+│   ├── cog2.py           // DO NOT MODIFY
+│   ├── cogupdate.py      // DO NOT MODIFY
+│   ├── custommod.py      // Safe to modify
+│   └── other-cogs
+│
+├── main.py               // Main bot loader
+└── requirements.txt      // Dependencies
+      </pre>
+    </section>
+
+    <section id="guidelines">
+      <h2>Guidelines for Modding Cogs</h2>
+      <ul>
+        <li>Use version control to track changes.</li>
+        <li>Avoid modifying core files; instead, extend functionality.</li>
+        <li>Follow coding conventions for consistency.</li>
+        <li>Implement robust error handling.</li>
+        <li>Keep modifications modular for easier debugging.</li>
+      </ul>
+    </section>
+
+    <section id="files-to-avoid">
+      <h2>Files to Avoid Editing</h2>
+      <p>
+        Do not edit the following files, as they are critical:
+      </p>
+      <ul>
+        <li><code>cogs/core.py</code></li>
+        <li><code>cogs/debug.py</code></li>
+        <li><code>cogs/debug2.py</code></li>
+        <li><code>cogs/cog2.py</code></li>
+        <li><code>cogs/cogupdate.py</code></li>
+      </ul>
+    </section>
+
+    <section id="creating-cogs">
+      <h2>Creating and Integrating New Cogs</h2>
+      <p>
+        To add new features, create a new cog file, following this template:
+      </p>
+      <pre>
+# File: cogs/custommod.py
+
+from discord.ext import commands
+
+class CustomMod(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command(name="hello")
+    async def hello_command(self, ctx):
+        """Responds with a greeting."""
+        await ctx.send("Hello, world!")
+
+def setup(bot):
+    bot.add_cog(CustomMod(bot))
+      </pre>
+    </section>
+
+    <section id="testing">
+      <h2>Testing and Debugging Your Mods</h2>
+      <ul>
+        <li>Test locally before deploying.</li>
+        <li>Write unit and integration tests.</li>
+        <li>Monitor logs to detect errors.</li>
+      </ul>
+    </section>
+
+    <section id="contributing">
+      <h2>Contributing</h2>
+      <p>
+        We welcome contributions to WDiscordBot! Please follow these steps:
+      </p>
+      <ul>
+        <li><strong>Fork the Repository:</strong> Click on the "Fork" button in the GitHub repository to create your copy.</li>
+        <li><strong>Clone Your Fork:</strong> Use <code>git clone &lt;your-repo-url&gt;</code> to download your fork locally.</li>
+        <li><strong>Create a Branch:</strong> Always create a new branch for your changes, using a clear and descriptive name.</li>
+        <li><strong>Implement Your Changes:</strong> Follow the project's coding guidelines and update documentation where necessary. Don't forget to add tests to cover new functionality.</li>
+        <li><strong>Submit a Pull Request:</strong> Once your changes pass local testing, submit a pull request to the main repository with a detailed explanation of your modifications.</li>
+        <li><strong>Participate in Code Review:</strong> Engage in discussions, address feedback, and make adjustments as needed.</li>
+        <li><strong>Stay Synchronized:</strong> Regularly update your fork and branch with changes from the upstream repository to avoid merge conflicts.</li>
+      </ul>
+      <p>
+        For any questions or further guidance, join our Discord community or refer to the repository's issue tracker.
+      </p>
+    </section>
+
+    <section id="conclusion">
+      <h2>Conclusion</h2>
+      <p>
+        Follow these best practices to keep WDiscordBot stable, mod-friendly, and open for contributions. By avoiding modifications to core files, using modular design, and adhering to contribution guidelines, you'll help foster a vibrant, collaborative community.
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    <p>© 2025 WDiscordBot - All Rights Reserved.</p>
+  </footer>
+
+</body>
+</html>
