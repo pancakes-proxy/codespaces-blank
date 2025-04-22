@@ -167,6 +167,10 @@ class Core(commands.Cog):
     @app_commands.command(name="supportserver", description="Sends a link to the support server.")
     async def supportserver(self, interaction: discord.Interaction):
         await interaction.response.send_message("https://discord.gg/9CFwFRPNH4")
+
+    @app_commands.command(name="contactsupport", description="support emails")   
+    async def contactsupport(self, interaction: discord.Interaction):
+        await interaction.response.send_message("For general support, please email:help@learnhelp,cc\nFor security issues, please email:securityoffice@auditoffice.learnhelp.cc\nFor staff issues, please email:contact@admin.office.learnhelp.cc") 
             
 
 async def setup(bot: commands.Bot):

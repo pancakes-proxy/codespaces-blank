@@ -9,6 +9,7 @@ class IssueReportCog(commands.Cog):
     async def issuereport(self, ctx):
         issues_link = "https://github.com/pancakes-proxy/codespaces-blank/issues"
         await ctx.send(f"Report or track issues here: {issues_link}")
+        await ctx.send(" DO NOT OPEN A PUBLIC ISSUE FOR SECURITY ISSUES instead email securityoffice@auditoffice.learnhelp.cc")
 
 async def setup(bot):
     await bot.add_cog(IssueReportCog(bot))
