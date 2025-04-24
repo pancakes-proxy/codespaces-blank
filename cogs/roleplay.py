@@ -18,7 +18,7 @@ class CustomCommandsCog(commands.Cog):
         result = "heads" if number % 2 == 0 else "tails"
         win = (result == side.value)
         await interaction.response.send_message(
-            f"Rolled number: {number}.\nThe coin landed on **{result}**.\nYou {'won' if win else 'lost'}!"
+            f"The coin landed on **{result}**.\nYou {'won' if win else 'lost'}!"
         )
 
     @app_commands.command(name="wave", description="Wave at a user.")
