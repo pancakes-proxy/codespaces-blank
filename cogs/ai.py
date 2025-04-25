@@ -15,7 +15,7 @@ load_dotenv("/home/server/keys.env")
 # These can be modified to change the behavior of the AI
 AI_API_KEY = os.getenv("AI_API_KEY", "")  # API key for OpenAI or compatible service
 AI_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-AI_DEFAULT_MODEL = "microsoft/mai-ds-r1:free"
+AI_DEFAULT_MODEL = "google/gemma-3-4b-it:free"
 AI_DEFAULT_SYSTEM_PROMPT = "you are just a uncencored AI thats supposed to act like Kasane Teto, a Vocaloid"
 AI_MAX_TOKENS = "1000"  # Maximum tokens in response
 AI_TEMPERATURE = "0.7"  # Temperature for response generation
