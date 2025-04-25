@@ -146,10 +146,5 @@ class CustomCommandsCog(commands.Cog):
         await interaction.response.send_message(
             f"{interaction.user.mention} slayed {member.mention} mortal combat style")
 
-   @app_commands.command(name="rape", description="rape a user.")
-    async def rape(self, interaction: discord.Interaction, member: discord.Member):
-        await interaction.response.send_message(
-            f"""{interaction.user.mention} raped {member.mention} from the middle of the night to midday before {interaction.user.mention} scurried off into the night never to be caught....""")
-
 async def setup(bot):
     await bot.add_cog(CustomCommandsCog(bot))
