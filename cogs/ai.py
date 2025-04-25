@@ -5,6 +5,11 @@ from dotenv import load_dotenv
 import requests
 import json
 
+
+class AICog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
 # Load environment variables
 load_dotenv('/home/server/keys.env/')
 API_KEY = os.getenv('AI_API_KEY')
@@ -20,7 +25,7 @@ class AI(commands.Cog):
             "Content-Type": "application/json",
             "HTTP-Referer": "https://github.com/zacr/discordbot",  # Replace with your project URL
         }
-
+      
     @commands.command(name='setprompt')
     async def setprompt(self, ctx, *, new_prompt: str):
         """Change the system prompt"""

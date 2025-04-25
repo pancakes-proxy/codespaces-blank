@@ -4,7 +4,7 @@ from discord import app_commands
 from enum import Enum
 import random
 
-class CustomCommandsCog(commands.Cog):
+class RoleplayCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
