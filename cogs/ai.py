@@ -9,7 +9,7 @@ import asyncio
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv()
+load_dotenv("/home/server/keys.env")
 
 # Customization Variables
 # These can be modified to change the behavior of the AI
