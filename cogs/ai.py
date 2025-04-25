@@ -73,7 +73,6 @@ class AI(commands.Cog):
             await ctx.send("No chat history to clear!")
 
     @app_commands.command(name='setmodel')
-    @app_commands.has_permissions(administrator=True)
     async def setmodel(self, ctx, model_name: str):
         """Change the AI model."""
         allowed_models = ["google/gemma-7b-it:free", "google/gemma-2b-it:free"]
