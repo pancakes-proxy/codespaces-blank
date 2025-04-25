@@ -1,8 +1,10 @@
 import os
 import discord
-from discord.ext import app_commands
+from discord import app_commands
 from dotenv import load_dotenv
 import aiohttp
+
+
 
 # Load environment variables - note the removal of the trailing slash.
 load_dotenv('/home/server/keys.env')
