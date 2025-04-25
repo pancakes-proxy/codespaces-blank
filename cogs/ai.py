@@ -21,13 +21,13 @@ class AI(commands.Cog):
             "HTTP-Referer": "https://github.com/zacr/discordbot",  # Replace with your project URL
         }
 
-    @commands.command()
+    @commands.command(name='setprompt')
     async def setprompt(self, ctx, *, new_prompt: str):
         """Change the system prompt"""
         self.system_prompt = new_prompt
         await ctx.send(f"System prompt changed to: {new_prompt}")
 
-    @commands.command()
+    @commands.command(name='ai')
     async def ai(self, ctx, *, prompt: str):
         """Send a prompt to the AI model"""
         try:
@@ -58,7 +58,7 @@ class AI(commands.Cog):
         except Exception as e:
             await ctx.send(f"Error: {str(e)}")
 
-    @commands.command()
+    @commands.command(name='clearchat')
     async def clearchat(self, ctx):
         """Clear your chat history with the AI"""
         if ctx.author.id in self.chat_histories:
@@ -67,7 +67,8 @@ class AI(commands.Cog):
         else:
             await ctx.send("No chat history to clear!")
 
-    @commands.command()
+    @commands.command(name='setmodel')
+    @commands.has_permissions(administrator=True)
     async def setmodel(self, ctx, model_name: str):
         """Change the AI model"""
         allowed_models = ["google/gemma-7b-it:free", "google/gemma-2b-it:free"]
