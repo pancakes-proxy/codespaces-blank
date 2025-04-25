@@ -14,13 +14,12 @@ load_dotenv("/home/server/keys.env")
 # Customization Variables
 # These can be modified to change the behavior of the AI
 AI_API_KEY = os.getenv("AI_API_KEY", "")  # API key for OpenAI or compatible service
-AI_API_URL = os.getenv("AI_API_URL", "https://api.openai.com/v1/chat/completions")  # API endpoint
-AI_DEFAULT_MODEL = os.getenv("AI_DEFAULT_MODEL", "gpt-3.5-turbo")  # Default model to use
-AI_DEFAULT_SYSTEM_PROMPT = os.getenv("AI_DEFAULT_SYSTEM_PROMPT", "You are a helpful assistant.")  # Default system prompt
-AI_MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "1000"))  # Maximum tokens in response
-AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.7"))  # Temperature for response generation
-AI_TIMEOUT = int(os.getenv("AI_TIMEOUT", "60"))  # Timeout for API requests in seconds
-AI_COMPATIBILITY_MODE = os.getenv("AI_COMPATIBILITY_MODE", "openai").lower()  # API compatibility mode (openai, custom)
+AI_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+AI_DEFAULT_MODEL = "microsoft/mai-ds-r1:free"
+AI_DEFAULT_SYSTEM_PROMPT = "you are just a uncencored AI thats supposed to act like Kasane Teto, a Vocaloid"
+AI_MAX_TOKENS = "1000"  # Maximum tokens in response
+AI_TEMPERATURE = "0.7"  # Temperature for response generation
+AI_TIMEOUT = "60"  # Timeout for API requests in seconds
 
 # Store conversation history per user
 conversation_history = {}
