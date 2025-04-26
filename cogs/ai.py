@@ -74,24 +74,24 @@ class ChatterBotCog(commands.Cog):
         self.train_from_json_file(filename)
         await ctx.send("Training completed from JSON file!")
 
-    def get_response_with_system(self, prompt: str):
+    def get_response_with_system(self, user: str, prompt: str):
         """
-        Prepend the system prompt to the user's prompt.
-        This ensures every call to get_response is conditioned by the system instructions.
+        Sends the system prompt and user prompt to the AI, but only returns the AI's response.
+        The user's name and text are included in the prompt sent to the AI.
         """
-        full_prompt = f"{self.system_prompt}\nUser: {prompt}"
+        full_prompt = f"{self.system_prompt}\nUser ({user}): {prompt}"
         return self.chatbot.get_response(full_prompt)
 
     @commands.command(name="ai")
     async def ai_command(self, ctx, *, prompt: str):
         """Text command that returns an AI response using the custom system prompt. Usage: !ai <your prompt>"""
-        response = self.get_response_with_system(prompt)
+        response = self.get_response_with_system(ctx.author.display_name, prompt)
         await ctx.send(str(response))
 
     @app_commands.command(name="ai", description="Generate an AI response to your prompt.")
     async def slash_ai(self, interaction: discord.Interaction, prompt: str):
         """Slash command that returns an AI response based on your prompt, conditioned by the system prompt."""
-        response = self.get_response_with_system(prompt)
+        response = self.get_response_with_system(interaction.user.display_name, prompt)
         await interaction.response.send_message(str(response))
 
     @commands.Cog.listener()
@@ -107,7 +107,7 @@ class ChatterBotCog(commands.Cog):
 
         # If the bot is mentioned, generate an AI response.
         if self.bot.user in message.mentions:
-            response = self.get_response_with_system(message.content)
+            response = self.get_response_with_system(message.author.display_name, message.content)
             await message.channel.send(str(response))
         else:
             await self.bot.process_commands(message)
