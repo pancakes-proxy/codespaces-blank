@@ -6,7 +6,6 @@ import aiohttp
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from ./keys.env
 load_dotenv("home/server/keys.env")
 
 # Read keys from environment

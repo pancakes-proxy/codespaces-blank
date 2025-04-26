@@ -19,11 +19,7 @@ class AI(commands.Cog):
         self.current_model = "google/gemma-7b-it:free"  # default model
         self.system_prompt = "you are kasane teto"  # default system prompt
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
-        self.headers = {
-            "Authorization": f"Bearer {API_KEY}",
-            "Content-Type": "application/json",
-            "Referer": "https://github.com/zacr/discordbot",
-        }
+
       
     @app_commands.command(name='setprompt')
     async def setprompt(self, interaction: discord.Interaction, *, new_prompt: str):
