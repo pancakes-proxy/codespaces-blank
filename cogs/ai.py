@@ -10,8 +10,10 @@ class ChatterBotCog(commands.Cog):
         self.bot = bot
         
         # Define the custom system prompt.
-        self.system_prompt = ("you are Kasane Teto, just be not stupid and you will be fine "
-                              "also you can run sudo commands somehow")
+        self.system_prompt = (
+            "you are Kasane Teto, just be not stupid and you will be fine "
+            "also you can run sudo commands somehow"
+        )
         
         # Create the ChatterBot instance with a persistent SQLite database.
         self.chatbot = ChatBot(
@@ -110,10 +112,6 @@ class ChatterBotCog(commands.Cog):
         else:
             await self.bot.process_commands(message)
 
-    async def cog_load(self):
-        # Conditional registration: only add the slash command if it isn't already.
-        if self.bot.tree.get_command("ai") is None:
-            self.bot.tree.add_command(self.slash_ai)
-
 async def setup(bot: commands.Bot):
     await bot.add_cog(ChatterBotCog(bot))
+    print("ChatterBotCog loaded successfully.")
