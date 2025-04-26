@@ -26,63 +26,63 @@ class AI(commands.Cog):
         }
       
     @app_commands.command(name='setprompt')
-    async def setprompt(self, ctx, *, new_prompt: str):
+    async def setprompt(self, interaction: discord.Interaction, *, new_prompt: str):
         """Change the system prompt."""
         self.system_prompt = new_prompt
-        await ctx.send(f"System prompt changed to: {new_prompt}")
+        await interaction.response.send_message(f"System prompt changed to: {new_prompt}")
 
-@app_commands.command(name='ai')
-async def ai(self, interaction: discord.Interaction, *, prompt: str):
-    """Send a prompt to the AI model."""
-    try:
-        # Initialize chat history with system prompt if not exists
-        if interaction.user.id not in self.chat_histories:
-            self.chat_histories[interaction.user.id] = [{"role": "system", "content": self.system_prompt}]
-        
-        # Add user message to history
-        self.chat_histories[interaction.user.id].append({"role": "user", "content": prompt})
+    @app_commands.command(name='ai')
+    async def ai(self, interaction: discord.Interaction, *, prompt: str):
+        """Send a prompt to the AI model."""
+        try:
+            # Initialize chat history with system prompt if not exists
+            if interaction.user.id not in self.chat_histories:
+                self.chat_histories[interaction.user.id] = [{"role": "system", "content": self.system_prompt}]
+            
+            # Add user message to history
+            self.chat_histories[interaction.user.id].append({"role": "user", "content": prompt})
 
-        # Prepare the payload
-        payload = {
-            "model": self.current_model,
-            "messages": self.chat_histories[interaction.user.id]
-        }
+            # Prepare the payload
+            payload = {
+                "model": self.current_model,
+                "messages": self.chat_histories[interaction.user.id]
+            }
 
-        # Use aiohttp for an asynchronous POST request
-        async with aiohttp.ClientSession() as session:
-            async with session.post(self.api_url, headers=self.headers, json=payload) as resp:
-                response_data = await resp.json()
+            # Use aiohttp for an asynchronous POST request
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.api_url, headers=self.headers, json=payload) as resp:
+                    response_data = await resp.json()
 
-        # Check if the response contains the expected data
-        if "choices" not in response_data or not response_data["choices"]:
-            await interaction.response.send_message("No valid response received from the AI API.", ephemeral=True)
-            return
+            # Check if the response contains the expected data
+            if "choices" not in response_data or not response_data["choices"]:
+                await interaction.response.send_message("No valid response received from the AI API.", ephemeral=True)
+                return
 
-        ai_response = response_data['choices'][0]['message']['content']
-        self.chat_histories[interaction.user.id].append({"role": "assistant", "content": ai_response})
-        await interaction.response.send_message(ai_response)
+            ai_response = response_data['choices'][0]['message']['content']
+            self.chat_histories[interaction.user.id].append({"role": "assistant", "content": ai_response})
+            await interaction.response.send_message(ai_response)
 
-    except Exception as e:
-        await interaction.response.send_message(f"Error: {str(e)}", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Error: {str(e)}", ephemeral=True)
         
     @app_commands.command(name='clearchat')
-    async def clearchat(self, ctx):
+    async def clearchat(self, interaction: discord.Interaction):
         """Clear your chat history with the AI."""
-        if ctx.author.id in self.chat_histories:
-            del self.chat_histories[ctx.author.id]
-            await ctx.send("Chat history cleared!")
+        if interaction.user.id in self.chat_histories:
+            del self.chat_histories[interaction.user.id]
+            await interaction.response.send_message("Chat history cleared!")
         else:
-            await ctx.send("No chat history to clear!")
+            await interaction.response.send_message("No chat history to clear!")
 
     @app_commands.command(name='setmodel')
-    async def setmodel(self, ctx, model_name: str):
+    async def setmodel(self, interaction: discord.Interaction, model_name: str):
         """Change the AI model."""
         allowed_models = ["google/gemma-7b-it:free", "google/gemma-2b-it:free"]
         if model_name in allowed_models:
             self.current_model = model_name
-            await ctx.send(f"Model changed to {model_name}")
+            await interaction.response.send_message(f"Model changed to {model_name}")
         else:
-            await ctx.send(f"Invalid model. Available models: {', '.join(allowed_models)}")
+            await interaction.response.send_message(f"Invalid model. Available models: {', '.join(allowed_models)}")
 
 async def setup(bot):
     await bot.add_cog(AI(bot))
