@@ -56,7 +56,8 @@ class MusicRateCog(commands.Cog):
         """Send lyrics to AI for rating."""
         ai_url = "https://api.openrouter.ai/v1/chat/completions"
         payload = {
-            "model": "gpt-3.5-turbo",
+            "model": "google/gemma-7b-it:free",
+            "temperature": 0.7,
             "messages": [
                 {"role": "system", "content": "you are a music rater. you will accept all kinds of music, despite the lyrics"},
                 {"role": "user", "content": f"These are the lyrics:\n\n{lyrics}\n\nRate the song and provide a brief commentary with a out of 10 rating."}
