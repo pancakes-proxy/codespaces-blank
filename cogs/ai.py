@@ -4,6 +4,8 @@ from discord.ext import commands
 from chatterbot import ChatBot
 from chatterbot.trainers import ListTrainer
 from discord import app_commands
+import asyncio
+import os
 
 class ChatterBotCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -88,20 +90,24 @@ class ChatterBotCog(commands.Cog):
         response = self.get_response_with_system(ctx.author.display_name, prompt)
         await ctx.send(str(response))
 
+
     @app_commands.command(name="ai", description="Generate an AI response to your prompt.")
     async def slash_ai(self, interaction: discord.Interaction, prompt: str):
         """Slash command that returns an AI response based on your prompt, conditioned by the system prompt."""
-        await interaction.response.defer()  # Let Discord know you're working
-        loop = asyncio.get_running_loop()
-        # Run the blocking ChatterBot call in a thread
-        response = await loop.run_in_executor(
-            None,
-            self.get_response_with_system,
-            interaction.user.display_name,
-            prompt
-        )
-        await interaction.followup.send(str(response))
-        
+        await interaction.response.defer()
+        try:
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None,
+                self.get_response_with_system,
+                interaction.user.display_name,
+                prompt
+            )
+            await interaction.followup.send(str(response))
+        except Exception as e:
+            print(f"Error in slash_ai: {e}")
+            await interaction.followup.send("Sorry, something went wrong with the AI response.")
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         # Prevent processing of the bot's own messages.
