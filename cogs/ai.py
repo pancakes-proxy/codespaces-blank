@@ -91,9 +91,17 @@ class ChatterBotCog(commands.Cog):
     @app_commands.command(name="ai", description="Generate an AI response to your prompt.")
     async def slash_ai(self, interaction: discord.Interaction, prompt: str):
         """Slash command that returns an AI response based on your prompt, conditioned by the system prompt."""
-        response = self.get_response_with_system(interaction.user.display_name, prompt)
-        await interaction.response.send_message(str(response))
-
+        await interaction.response.defer()  # Let Discord know you're working
+        loop = asyncio.get_running_loop()
+        # Run the blocking ChatterBot call in a thread
+        response = await loop.run_in_executor(
+            None,
+            self.get_response_with_system,
+            interaction.user.display_name,
+            prompt
+        )
+        await interaction.followup.send(str(response))
+        
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         # Prevent processing of the bot's own messages.

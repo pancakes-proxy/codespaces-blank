@@ -10,17 +10,14 @@ import asyncio
 # Load environment variables from absolute path
 load_dotenv("/home/server/keys.env")
 
-# Read keys from environment (ensure the env file uses these exact names)
 GENIUS_API_KEY = os.getenv("GENIUS_API_KEY")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")  # Changed from "AI2_API_KEY" for consistency
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# Check for missing API keys
 if not GENIUS_API_KEY:
     raise ValueError("GENIUS_API_KEY is not set in the environment variables.")
 if not OPENROUTER_API_KEY:
     raise ValueError("OPENROUTER_API_KEY is not set in the environment variables.")
 
-# Initialize Genius API
 genius = lyricsgenius.Genius(GENIUS_API_KEY)
 
 class MusicRateCog(commands.Cog):
@@ -33,22 +30,24 @@ class MusicRateCog(commands.Cog):
     )
     async def musicrate(self, interaction: discord.Interaction, song: str, artist: str = None):
         await interaction.response.defer()
+        try:
+            lyrics = await self.search_lyrics(song, artist)
+            if not lyrics or lyrics == "Error fetching lyrics.":
+                await interaction.followup.send(f"Couldn't find lyrics for '{song}'.")
+                return
 
-        # Fetch lyrics (using an executor to avoid blocking the event loop)
-        lyrics = await self.search_lyrics(song, artist)
-        if not lyrics:
-            await interaction.followup.send(f"Couldn't find lyrics for '{song}'.")
-            return
+            rating = await self.rate_song(lyrics)
+            if not rating or rating == "Issue with rating request.":
+                await interaction.followup.send("Couldn't get a rating from the AI.")
+                return
 
-        # Get AI rating
-        rating = await self.rate_song(lyrics)
-        response = f"**Rating for '{song}':**\n{rating}"
-        await interaction.followup.send(response)
+            response = f"**Rating for '{song}':**\n{rating}"
+            await interaction.followup.send(response)
+        except Exception as e:
+            await interaction.followup.send(f"An error occurred: {e}")
 
     async def search_lyrics(self, song: str, artist: str = None) -> str:
-        """Fetch lyrics from Genius API."""
         try:
-            # Run the synchronous call in an executor
             loop = asyncio.get_running_loop()
             song_obj = await loop.run_in_executor(None, genius.search_song, song, artist)
             return song_obj.lyrics if song_obj else ""
@@ -57,7 +56,6 @@ class MusicRateCog(commands.Cog):
             return "Error fetching lyrics."
 
     async def rate_song(self, lyrics: str) -> str:
-        """Send lyrics to AI for rating."""
         ai_url = "https://api.openrouter.ai/v1/chat/completions"
         payload = {
             "model": "google/gemma-7b-it:free",
@@ -81,17 +79,18 @@ class MusicRateCog(commands.Cog):
             "Content-Type": "application/json"
         }
 
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(ai_url, json=payload, headers=headers) as response:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(ai_url, json=payload, headers=headers, timeout=30) as response:
                     if response.status == 200:
                         data = await response.json()
                         return data["choices"][0]["message"]["content"]
                     else:
-                        return f"Error retrieving rating: {response.status}"
-            except Exception as e:
-                print(f"Error rating song: {e}")
-                return "Issue with rating request."
+                        print(f"AI API error: {response.status}")
+                        return "Issue with rating request."
+        except Exception as e:
+            print(f"Error rating song: {e}")
+            return "Issue with rating request."
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(MusicRateCog(bot))
