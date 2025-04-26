@@ -66,15 +66,6 @@ class ChatterBotCog(commands.Cog):
         except Exception as e:
             print(f"Error reading or training from JSON file: {e}")
 
-    @commands.command(name="trainjson")
-    async def train_json_command(self, ctx, filename: str):
-        """
-        Trains the bot using the specified JSON file.
-        Usage: !trainjson your_data.json
-        """
-        self.train_from_json_file(filename)
-        await ctx.send("Training completed from JSON file!")
-
     def get_response_with_system(self, prompt: str):
         """
         Prepend the system prompt to the user's prompt.
@@ -83,21 +74,12 @@ class ChatterBotCog(commands.Cog):
         full_prompt = f"{self.system_prompt}\nUser: {prompt}"
         return self.chatbot.get_response(full_prompt)
 
-    @commands.command(name="ai")
-    async def ai_command(self, ctx, *, prompt: str):
-        """
-        Text command that returns an AI response using the custom system prompt.
-        Usage: !ai <your prompt here>
-        """
-        response = self.get_response_with_system(prompt)
-        await ctx.send(str(response))
-
     @app_commands.command(name="chat", description="Generate an AI response to your prompt.")
     async def slash_ai(self, interaction: discord.Interaction, prompt: str):
         """
         Slash command that generates an AI response based on your prompt,
         conditioned by the system prompt.
-        Usage: /ai prompt:<your prompt here>
+        Usage: /chat prompt:<your prompt here>
         """
         response = self.get_response_with_system(prompt)
         await interaction.response.send_message(str(response))
@@ -108,17 +90,10 @@ class ChatterBotCog(commands.Cog):
         if message.author == self.bot.user:
             return
         
-        # Allow commands starting with "!" to be processed as regular commands.
-        if message.content.startswith("!"):
-            await self.bot.process_commands(message)
-            return
-        
         # If the bot is mentioned, generate an AI response including the system prompt.
         if self.bot.user in message.mentions:
             response = self.get_response_with_system(message.content)
             await message.channel.send(str(response))
-        else:
-            await self.bot.process_commands(message)
 
     async def cog_load(self):
         # Register the slash command so it's available to your guilds.
