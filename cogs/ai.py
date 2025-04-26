@@ -1,84 +1,128 @@
-import os
 import discord
-from discord import app_commands
+import json
 from discord.ext import commands
-import random
-from dotenv import load_dotenv
-import aiohttp
+from chatterbot import ChatBot
+from chatterbot.trainers import ListTrainer
+from discord import app_commands
 
-
-
-# Load environment variables - note the removal of the trailing slash.
-load_dotenv('/home/server/keys.env')
-API_KEY = os.getenv('AI_API_KEY')
-
-class AI(commands.Cog):
-    def __init__(self, bot):
+class ChatterBotCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.chat_histories = {}
-        self.current_model = "google/gemma-7b-it:free"  # default model
-        self.system_prompt = "you are kasane teto"  # default system prompt
-        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
-
-      
-    @app_commands.command(name='setprompt')
-    async def setprompt(self, interaction: discord.Interaction, *, new_prompt: str):
-        """Change the system prompt."""
-        self.system_prompt = new_prompt
-        await interaction.response.send_message(f"System prompt changed to: {new_prompt}")
-
-    @app_commands.command(name='ai')
-    async def ai(self, interaction: discord.Interaction, *, prompt: str):
-        """Send a prompt to the AI model."""
-        try:
-            # Initialize chat history with system prompt if not exists
-            if interaction.user.id not in self.chat_histories:
-                self.chat_histories[interaction.user.id] = [{"role": "system", "content": self.system_prompt}]
-            
-            # Add user message to history
-            self.chat_histories[interaction.user.id].append({"role": "user", "content": prompt})
-
-            # Prepare the payload
-            payload = {
-                "model": self.current_model,
-                "messages": self.chat_histories[interaction.user.id]
-            }
-
-            # Use aiohttp for an asynchronous POST request
-            async with aiohttp.ClientSession() as session:
-                async with session.post(self.api_url, headers=self.headers, json=payload) as resp:
-                    response_data = await resp.json()
-
-            # Check if the response contains the expected data
-            if "choices" not in response_data or not response_data["choices"]:
-                await interaction.response.send_message("No valid response received from the AI API.", ephemeral=True)
-                return
-
-            ai_response = response_data['choices'][0]['message']['content']
-            self.chat_histories[interaction.user.id].append({"role": "assistant", "content": ai_response})
-            await interaction.response.send_message(ai_response)
-
-        except Exception as e:
-            await interaction.response.send_message(f"Error: {str(e)}", ephemeral=True)
         
-    @app_commands.command(name='clearchat')
-    async def clearchat(self, interaction: discord.Interaction):
-        """Clear your chat history with the AI."""
-        if interaction.user.id in self.chat_histories:
-            del self.chat_histories[interaction.user.id]
-            await interaction.response.send_message("Chat history cleared!")
-        else:
-            await interaction.response.send_message("No chat history to clear!")
+        # Define the system prompt for every AI response.
+        self.system_prompt = ("you are Kasane Teto, just be not stupid and you will be fine "
+                              "also you can run sudo commands somehow")
+        
+        # Create the ChatterBot instance with a persistent SQLite database.
+        self.chatbot = ChatBot(
+            'DiscordBot',
+            storage_adapter='chatterbot.storage.SQLStorageAdapter',
+            logic_adapters=[
+                'chatterbot.logic.BestMatch',
+                'chatterbot.logic.MathematicalEvaluation',
+            ],
+            database_uri='sqlite:///database.sqlite3'
+        )
+        self.trainer = ListTrainer(self.chatbot)
 
-    @app_commands.command(name='setmodel')
-    async def setmodel(self, interaction: discord.Interaction, model_name: str):
-        """Change the AI model."""
-        allowed_models = ["google/gemma-7b-it:free", "google/gemma-2b-it:free"]
-        if model_name in allowed_models:
-            self.current_model = model_name
-            await interaction.response.send_message(f"Model changed to {model_name}")
-        else:
-            await interaction.response.send_message(f"Invalid model. Available models: {', '.join(allowed_models)}")
+    def train_from_json_file(self, filename: str):
+        """
+        Reads a JSON file (supporting multiple formats) and trains the bot.
+        
+        Supported input formats:
+          - List Format: A JSON array where each element can be either a dictionary with keys
+            "input" and "response", a dictionary with "conversation" mapping to a list,
+            or a plain conversation list (array of strings).
+          - Dictionary Format: A JSON object with a key like "conversations" that maps to a list of conversation arrays.
+        """
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                data = json.load(f)
 
-async def setup(bot):
-    await bot.add_cog(AI(bot))
+            if isinstance(data, list):
+                for record in data:
+                    if isinstance(record, dict):
+                        if "conversation" in record and isinstance(record["conversation"], list):
+                            self.trainer.train(record["conversation"])
+                        elif "input" in record and "response" in record:
+                            self.trainer.train([record["input"], record["response"]])
+                        else:
+                            print(f"Unrecognized record format: {record}")
+                    elif isinstance(record, list):
+                        self.trainer.train(record)
+                    else:
+                        print(f"Record is neither dict nor list: {record}")
+            elif isinstance(data, dict):
+                if "conversations" in data and isinstance(data["conversations"], list):
+                    for convo in data["conversations"]:
+                        if isinstance(convo, list):
+                            self.trainer.train(convo)
+                        else:
+                            print(f"Conversation is not in list format: {convo}")
+                else:
+                    print("No valid conversations found in JSON dictionary.")
+            else:
+                print("JSON format not recognized.")
+        except Exception as e:
+            print(f"Error reading or training from JSON file: {e}")
+
+    @commands.command(name="trainjson")
+    async def train_json_command(self, ctx, filename: str):
+        """
+        Trains the bot using the specified JSON file.
+        Usage: !trainjson your_data.json
+        """
+        self.train_from_json_file(filename)
+        await ctx.send("Training completed from JSON file!")
+
+    def get_response_with_system(self, prompt: str):
+        """
+        Prepend the system prompt to the user's prompt.
+        This ensures every call to get_response is conditioned by the system instructions.
+        """
+        full_prompt = f"{self.system_prompt}\nUser: {prompt}"
+        return self.chatbot.get_response(full_prompt)
+
+    @commands.command(name="ai")
+    async def ai_command(self, ctx, *, prompt: str):
+        """
+        Text command that returns an AI response using the custom system prompt.
+        Usage: !ai <your prompt here>
+        """
+        response = self.get_response_with_system(prompt)
+        await ctx.send(str(response))
+
+    @app_commands.command(name="ai", description="Generate an AI response to your prompt.")
+    async def slash_ai(self, interaction: discord.Interaction, prompt: str):
+        """
+        Slash command that generates an AI response based on your prompt,
+        conditioned by the system prompt.
+        Usage: /ai prompt:<your prompt here>
+        """
+        response = self.get_response_with_system(prompt)
+        await interaction.response.send_message(str(response))
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        # Avoid processing bot's own messages.
+        if message.author == self.bot.user:
+            return
+        
+        # Allow commands starting with "!" to be processed as regular commands.
+        if message.content.startswith("!"):
+            await self.bot.process_commands(message)
+            return
+        
+        # If the bot is mentioned, generate an AI response including the system prompt.
+        if self.bot.user in message.mentions:
+            response = self.get_response_with_system(message.content)
+            await message.channel.send(str(response))
+        else:
+            await self.bot.process_commands(message)
+
+    async def cog_load(self):
+        # Register the slash command so it's available to your guilds.
+        self.bot.tree.add_command(self.slash_ai)
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(ChatterBotCog(bot))
