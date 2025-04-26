@@ -70,12 +70,6 @@ class ChatterBotCog(commands.Cog):
         except Exception as e:
             print(f"Error reading or training from JSON file: {e}")
 
-    @commands.command(name="trainjson")
-    async def train_json_command(self, ctx, filename: str):
-        """Trains the bot using the specified JSON file. Usage: !trainjson your_data.json"""
-        self.train_from_json_file(filename)
-        await ctx.send("Training completed from JSON file!")
-
     def get_response_with_system(self, user: str, prompt: str):
         """
         Sends the system prompt and user prompt to the AI, but only returns the AI's response.
@@ -84,12 +78,16 @@ class ChatterBotCog(commands.Cog):
         full_prompt = f"{self.system_prompt}\nUser ({user}): {prompt}"
         return self.chatbot.get_response(full_prompt)
 
-    @commands.command(name="ai")
-    async def ai_command(self, ctx, *, prompt: str):
-        """Text command that returns an AI response using the custom system prompt. Usage: !ai <your prompt>"""
-        response = self.get_response_with_system(ctx.author.display_name, prompt)
-        await ctx.send(str(response))
-
+    @app_commands.command(name="trainjson", description="Train the bot using a JSON file (filename must be on server).")
+    async def slash_train_json(self, interaction: discord.Interaction, filename: str):
+        """Slash command to train the bot using the specified JSON file."""
+        await interaction.response.defer()
+        try:
+            self.train_from_json_file(filename)
+            await interaction.followup.send("Training completed from JSON file!")
+        except Exception as e:
+            print(f"Error in slash_train_json: {e}")
+            await interaction.followup.send("Sorry, something went wrong with training.")
 
     @app_commands.command(name="ai", description="Generate an AI response to your prompt.")
     async def slash_ai(self, interaction: discord.Interaction, prompt: str):
@@ -121,7 +119,13 @@ class ChatterBotCog(commands.Cog):
 
         # If the bot is mentioned, generate an AI response.
         if self.bot.user in message.mentions:
-            response = self.get_response_with_system(message.author.display_name, message.content)
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None,
+                self.get_response_with_system,
+                message.author.display_name,
+                message.content
+            )
             await message.channel.send(str(response))
         else:
             await self.bot.process_commands(message)
