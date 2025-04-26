@@ -92,7 +92,7 @@ class ChatterBotCog(commands.Cog):
         response = self.get_response_with_system(prompt)
         await ctx.send(str(response))
 
-    @app_commands.command(name="ai", description="Generate an AI response to your prompt.")
+    @app_commands.command(name="chat", description="Generate an AI response to your prompt.")
     async def slash_ai(self, interaction: discord.Interaction, prompt: str):
         """
         Slash command that generates an AI response based on your prompt,
