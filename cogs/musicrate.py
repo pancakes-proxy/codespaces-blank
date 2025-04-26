@@ -5,12 +5,14 @@ import lyricsgenius
 import aiohttp
 import os
 from dotenv import load_dotenv
+import asyncio
 
-load_dotenv("home/server/keys.env")
+# Load environment variables from absolute path
+load_dotenv("/home/server/keys.env")
 
-# Read keys from environment
+# Read keys from environment (ensure the env file uses these exact names)
 GENIUS_API_KEY = os.getenv("GENIUS_API_KEY")
-OPENROUTER_API_KEY = os.getenv("AI2_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")  # Changed from "AI2_API_KEY" for consistency
 
 # Check for missing API keys
 if not GENIUS_API_KEY:
@@ -32,7 +34,7 @@ class MusicRateCog(commands.Cog):
     async def musicrate(self, interaction: discord.Interaction, song: str, artist: str = None):
         await interaction.response.defer()
 
-        # Fetch lyrics
+        # Fetch lyrics (using an executor to avoid blocking the event loop)
         lyrics = await self.search_lyrics(song, artist)
         if not lyrics:
             await interaction.followup.send(f"Couldn't find lyrics for '{song}'.")
@@ -46,7 +48,9 @@ class MusicRateCog(commands.Cog):
     async def search_lyrics(self, song: str, artist: str = None) -> str:
         """Fetch lyrics from Genius API."""
         try:
-            song_obj = genius.search_song(song, artist)
+            # Run the synchronous call in an executor
+            loop = asyncio.get_running_loop()
+            song_obj = await loop.run_in_executor(None, genius.search_song, song, artist)
             return song_obj.lyrics if song_obj else ""
         except Exception as e:
             print(f"Error fetching lyrics: {e}")
@@ -59,8 +63,17 @@ class MusicRateCog(commands.Cog):
             "model": "google/gemma-7b-it:free",
             "temperature": 0.7,
             "messages": [
-                {"role": "system", "content": "you are a music rater. you will accept all kinds of music, despite the lyrics"},
-                {"role": "user", "content": f"These are the lyrics:\n\n{lyrics}\n\nRate the song and provide a brief commentary with a out of 10 rating."}
+                {
+                    "role": "system", 
+                    "content": "you are a music rater. you will accept all kinds of music, despite the lyrics"
+                },
+                {
+                    "role": "user", 
+                    "content": (
+                        f"These are the lyrics:\n\n{lyrics}\n\n"
+                        "Rate the song and provide a brief commentary with an out of 10 rating."
+                    )
+                }
             ]
         }
         headers = {
