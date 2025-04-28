@@ -152,6 +152,46 @@ class CustomCommandsCog(commands.Cog):
         await interaction.response.send_message(
             f"{interaction.user.mention} has given {member.mention}. them heavenly backshots"
             )
+        
+    @app_commands.command(name="arrest", description="Arrest a user.")
+    async def arrest(self, interaction: discord.Interaction, member: discord.Member, reason: str = None):
+        await interaction.response.send_message(
+            f"{interaction.user.mention} has arrested {member.mention} for {reason if reason else 'no reason given'}."
+            )
+
+    @app_commands.command(name="drug", description="Drug a user.")
+    async def drug(self, interaction: discord.Interaction, member: discord.Member):
+        await interaction.response.send_message(
+            f"{interaction.user.mention} has drugged {member.mention} with a mysterious substance. "
+            "They are now in a state of blissful confusion, unable to comprehend their surroundings. "
+        )
+
+    @app_commands.command(name="scream", description="Scream at a user.")
+    async def scream(self, interaction: discord.Interaction, member: discord.Member):
+        await interaction.response.send_message(
+            f"{interaction.user.mention} screamed at {member.mention} in a fit of rage. "
+            "The sound echoed through the halls, leaving everyone in shock."
+        )
+
+    @app_commands.command(name="toss", description="Toss a user.")
+    async def toss(self, interaction: discord.Interaction, member: discord.Member):
+        await interaction.response.send_message(
+            f"{interaction.user.mention} tossed {member.mention} into the air like a ragdoll. "
+            "They landed with a thud."
+        )            
+    
+    @app_commands.command(name="rob", description="Rob a user.")
+    async def rob(self, interaction: discord.Interaction, member: discord.Member):
+        await interaction.response.send_message(
+            f"{interaction.user.mention} robbed {member.mention} of their wallet. "
+            "They are now on the run from the law."
+        )
+
+    @app_commands.command(name="buydrugs", description="Buy drugs from a user.")
+    async def buy_drugs(self, interaction: discord.Interaction, member: discord.Member):
+        await interaction.response.send_message(
+            f"{interaction.user.mention} bought drugs from {member.mention}. "
+        )    
 
 async def setup(bot):
     await bot.add_cog(CustomCommandsCog(bot))
