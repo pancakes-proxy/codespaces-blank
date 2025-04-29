@@ -1,25 +1,25 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import os
 import aiohttp
-import dotenv
 from dotenv import load_dotenv
 
-load_dotenv("/home/server/keys.env"
+load_dotenv("/home/server/keys.env/")
+OPENROUTER_API_KEY = os.getenv("AI_API_KEY")
+if not OPENROUTER_API_KEY:
+    raise ValueError("AI_API_KEY environment variable not set.")
 
 class OpenRouterCog(commands.Cog):
     def __init__(self, bot):
-        self.bot = bo
-        self.openrouter_api_key = os.environ.get("AI_API_KEY")
-        if not self.openrouter_api_key:
-            raise ValueError("AI_API_KEY environment variable not set.")
+        self.bot = bot
         self.system_prompt = "You are Kasane Teto idk what else"
         self.model = "google/gemini-2.0-flash-exp:free"
         self.auto_respond = True  # Set to True for automatic responses
 
     async def _query_openrouter(self, prompt, use_web_search=False):
         headers = {
-            "Authorization": f"Bearer {self.openrouter_api_key}",
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "HTTP-Referer": "https://github.com/yourusername/yourbotname",  # Replace with your bot's info
             "X-Client-Type": "discord-bot",
             "X-Client-Version": discord.__version__,
@@ -59,17 +59,34 @@ class OpenRouterCog(commands.Cog):
                 response = await self._query_openrouter(message.content, use_web_search=True)
                 await message.reply(response)
 
-    @commands.hybrid_command(name="ai", description="Ask Kasane Teto something.")
-    async def ai(self, ctx: commands.Context, *, prompt: str):
-        async with ctx.typing():
+    @app_commands.command(name="ai", description="Ask Kasane Teto something.")
+    async def ai(self, interaction: discord.Interaction, *, prompt: str):
+        async with interaction.channel.typing():
             response = await self._query_openrouter(prompt, use_web_search=True)
-            await ctx.reply(response)
+            await interaction.response.send_message(response)
 
-    @commands.hybrid_command(name="setsysprompt", description="Set the system prompt for Kasane Teto.")
-    @commands.is_owner()  # Restrict this command to the bot owner
-    async def setsysprompt(self, ctx: commands.Context, *, new_prompt: str):
+    @app_commands.command(name="setsysprompt", description="Set the system prompt for Kasane Teto.")
+    @app_commands.checks.is_owner()
+    async def setsysprompt(self, interaction: discord.Interaction, *, new_prompt: str):
         self.system_prompt = new_prompt
-        await ctx.reply(f"System prompt updated to: `{self.system_prompt}`")
+        await interaction.response.send_message(f"System prompt updated to: `{self.system_prompt}`")
 
 async def setup(bot):
     await bot.add_cog(OpenRouterCog(bot))
+
+if __name__ == '__main__':
+    TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+    if not TOKEN:
+        raise ValueError("DISCORD_BOT_TOKEN environment variable not set.")
+    intents = discord.Intents.default()
+    intents.message_content = True
+    bot = commands.Bot(command_prefix="!", intents=intents)
+
+    @bot.event
+    async def on_ready():
+        print(f'Logged in as {bot.user.name}')
+        await bot.load_extension(__name__)
+        # This is crucial for syncing application commands globally
+        await bot.tree.sync()
+
+    bot.run(TOKEN)
