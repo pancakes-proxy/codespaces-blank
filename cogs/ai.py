@@ -78,7 +78,7 @@ class OpenRouterCog(commands.Cog):
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://discord-bot.example.com",  # Required for free tier
+            "HTTP-Referer": "https://learnhelp.cc/",  # Required for free tier
             "X-Title": "Discord Bot"  # Required for free tier
         }
         
