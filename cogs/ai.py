@@ -19,7 +19,7 @@ class OpenRouterCog(commands.Cog):
         
         # Default configuration - using a free model
         self.default_config = {
-            "model": "mistralai/mistral-7b-instruct:free",
+            "model": "google/gemini-2.0-flash-exp:free",
             "temperature": 0.7,
             "max_tokens": 1000,
             "top_p": 0.9,
@@ -240,7 +240,7 @@ class OpenRouterCog(commands.Cog):
             until = datetime.utcnow() + timedelta(minutes=minutes)
             
             # Apply the timeout
-            await member.timeout(until, reason="Timed out by Kasane Teto AI")
+            await member.timeout(until, reason="Timed out by Kasane Teto fucking bitch")
             return True
         except Exception as e:
             print(f"Error timing out user: {e}")
@@ -253,7 +253,7 @@ class OpenRouterCog(commands.Cog):
             encoded_query = urllib.parse.quote(query)
             
             # Use SerpAPI for search (you'll need to set SERPAPI_KEY in environment variables)
-            serp_api_key = os.getenv("SERPAPI_KEY", "")
+            serp_api_key = os.getenv("googlekey")
             if not serp_api_key:
                 return "I couldn't search the internet because the search API key is not set."
             
