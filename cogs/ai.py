@@ -167,7 +167,8 @@ class OpenRouterCog(commands.Cog):
                 "meta-llama/llama-2-70b-chat:free",
                 "openchat/openchat-7b:free",
                 "gryphe/mythomax-l2-13b:free",
-                "nousresearch/nous-hermes-llama2-13b:free"
+                "nousresearch/nous-hermes-llama2-13b:free",
+                "google/gemini-2.0-flash-exp:free"
             ]
             
             if model in free_models:
