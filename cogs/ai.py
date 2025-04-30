@@ -7,8 +7,6 @@ from discord.ext import commands
 from discord import app_commands
 from typing import Optional, Dict, List
 
-os.load_dotenv("/home/server/keys.env") # Load environment variables from .env file
-
 class OpenRouterCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -105,6 +103,22 @@ class OpenRouterCog(commands.Cog):
             print(f"Error generating response: {e}")
             return "Sorry, something went wrong while generating a response."
     
+    # Helper function to check if user has admin permissions
+    async def check_admin_permissions(self, interaction: discord.Interaction) -> bool:
+        """Check if the user has administrator permissions"""
+        if not interaction.guild:
+            return False
+        
+        # Get the user's permissions in the guild
+        permissions = interaction.user.guild_permissions
+        
+        # Check if the user has administrator permissions
+        if permissions.administrator:
+            return True
+        
+        await interaction.followup.send("You need administrator permissions to use this command.")
+        return False
+    
     @app_commands.command(name="ai", description="Chat with Kasane Teto AI")
     async def slash_ai(self, interaction: discord.Interaction, prompt: str):
         """Slash command to chat with the AI"""
@@ -133,6 +147,10 @@ class OpenRouterCog(commands.Cog):
     ):
         """Slash command to configure AI settings"""
         await interaction.response.defer()
+        
+        # Check if user has admin permissions
+        if not await self.check_admin_permissions(interaction):
+            return
         
         user_id = str(interaction.user.id)
         
@@ -191,6 +209,10 @@ class OpenRouterCog(commands.Cog):
         """Slash command to list available free AI models"""
         await interaction.response.defer()
         
+        # Check if user has admin permissions
+        if not await self.check_admin_permissions(interaction):
+            return
+        
         models_message = (
             "Available Free AI models:\n"
             "- `mistralai/mistral-7b-instruct:free` (Default, good all-around model)\n"
@@ -231,9 +253,9 @@ class OpenRouterCog(commands.Cog):
             await self.bot.process_commands(message)
 
 async def setup(bot: commands.Bot):
-    # Check if OPENROUTER_API_KEY is set
-    if not os.getenv("OPENROUTER_API_KEY"):
-        print("WARNING: OPENROUTER_API_KEY environment variable is not set. AI functionality will not work properly.")
+    # Check if AI_API_KEY is set
+    if not os.getenv("AI_API_KEY"):
+        print("WARNING: AI_API_KEY environment variable is not set. AI functionality will not work properly.")
         print("Get a free API key from https://openrouter.ai/keys")
     
     await bot.add_cog(OpenRouterCog(bot))
