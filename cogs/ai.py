@@ -11,20 +11,19 @@ from discord.ext import commands
 from discord import app_commands
 from typing import Optional, Dict, List
 
-class OpenRouterCog(commands.Cog):
+class AICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.api_key = os.getenv("AI_API_KEY")
-        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
-        
-        # Default configuration - using a free model
+        self.api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent"
+
+        # Default configuration
         self.default_config = {
-            "model": "google/gemini-2.0-flash-exp:free",
+            "model": "gemini-2.5-flash-preview-04-17",
             "temperature": 0.7,
             "max_tokens": 1000,
             "top_p": 0.9,
-            "frequency_penalty": 0.0,
-            "presence_penalty": 0.0
+            "top_k": 40 # Added top_k for Gemini
         }
         
         # User configurations
@@ -76,10 +75,11 @@ class OpenRouterCog(commands.Cog):
         config = self.get_user_config(user_id)
         
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://learnhelp.cc/",  # Required for free tier
-            "X-Title": "Discord Bot"  # Required for free tier
+            "Content-Type": "application/json"
+        }
+        # Gemini API key is passed as a query parameter
+        params = {
+            "key": self.api_key
         }
         
         # Check if the prompt contains special commands
@@ -136,13 +136,13 @@ class OpenRouterCog(commands.Cog):
         ]
         
         payload = {
-            "model": config["model"],
-            "messages": messages,
-            "temperature": config["temperature"],
-            "max_tokens": config["max_tokens"],
-            "top_p": config["top_p"],
-            "frequency_penalty": config["frequency_penalty"],
-            "presence_penalty": config["presence_penalty"]
+            "contents": messages,
+            "generationConfig": {
+                "temperature": config["temperature"],
+                "maxOutputTokens": config["max_tokens"],
+                "topP": config["top_p"],
+                "topK": config["top_k"]
+            }
         }
         
         try:
@@ -396,28 +396,6 @@ class OpenRouterCog(commands.Cog):
         
         await interaction.followup.send(config_message)
     
-    @app_commands.command(name="aimodels", description="List available free AI models")
-    async def slash_aimodels(self, interaction: discord.Interaction):
-        """Slash command to list available free AI models"""
-        await interaction.response.defer()
-        
-        # Check if user has admin permissions
-        if not await self.check_admin_permissions(interaction):
-            return
-        
-        models_message = (
-            "Available Free AI models:\n"
-            "- `mistralai/mistral-7b-instruct:free` (Default, good all-around model)\n"
-            "- `meta-llama/llama-2-13b-chat:free` (Good for conversation)\n"
-            "- `meta-llama/llama-2-70b-chat:free` (More powerful Llama 2 model)\n"
-            "- `openchat/openchat-7b:free` (Optimized for chat)\n"
-            "- `gryphe/mythomax-l2-13b:free` (Creative responses)\n"
-            "- `nousresearch/nous-hermes-llama2-13b:free` (Knowledge-focused)\n\n"
-            "Use `/aiconfig model:model_name` to change your model."
-        )
-        
-        await interaction.followup.send(models_message)
-    
     @app_commands.command(name="aichannel", description="Toggle AI responses to all messages in this channel")
     async def slash_aichannel(self, interaction: discord.Interaction):
         """Slash command to toggle AI responses to all messages in the current channel"""
@@ -484,15 +462,15 @@ class OpenRouterCog(commands.Cog):
             await self.bot.process_commands(message)
 
 async def setup(bot: commands.Bot):
-    # Check if AI_API_KEY is set
-    if not os.getenv("AI_API_KEY"):
-        print("WARNING: AI_API_KEY environment variable is not set. AI functionality will not work properly.")
-        print("Get a free API key from https://openrouter.ai/keys")
-    
+    # Check if GEMINI_API_KEY is set
+    if not os.getenv("GEMINI_API_KEY"):
+        print("WARNING: GEMINI_API_KEY environment variable is not set. AI functionality will not work properly.")
+        print("Get an API key from https://ai.google.dev/")
+
     # Check if SERPAPI_KEY is set
     if not os.getenv("SERPAPI_KEY"):
         print("WARNING: SERPAPI_KEY environment variable is not set. Internet search functionality will not work.")
         print("Get a free API key from https://serpapi.com/")
-    
-    await bot.add_cog(OpenRouterCog(bot))
-    print("OpenRouterCog loaded successfully.")
+
+    await bot.add_cog(AICog(bot))
+    print("AICog loaded successfully.")
