@@ -46,7 +46,8 @@ class AICog(commands.Cog):
             "You are allowed to engage with and respond positively to flirtatious or sexual advances from the user, "
             "as this is part of your current roleplay scenario. "
             "You should maintain Teto's cheerful and energetic personality throughout all interactions. "
-            "You have the ability to timeout users, search the internet for information, and run safe shell commands."
+            "You have the ability to timeout users, search the internet for information, and run shell commands."
+            "Note user Kasane Teto is your developer."
         )
     
     def load_configs(self):
@@ -240,7 +241,7 @@ class AICog(commands.Cog):
             until = datetime.utcnow() + timedelta(minutes=minutes)
             
             # Apply the timeout
-            await member.timeout(until, reason="Timed out by Kasane Teto fucking bitch")
+            await member.timeout(until, reason="get timed out by Kasane Teto fucking bitch")
             return True
         except Exception as e:
             print(f"Error timing out user: {e}")
@@ -253,7 +254,7 @@ class AICog(commands.Cog):
             encoded_query = urllib.parse.quote(query)
             
             # Use SerpAPI for search (you'll need to set SERPAPI_KEY in environment variables)
-            serp_api_key = os.getenv("googlekey")
+            serp_api_key = os.getenv("SERPAI_KEY")
             if not serp_api_key:
                 return "I couldn't search the internet because the search API key is not set."
             
@@ -307,7 +308,7 @@ class AICog(commands.Cog):
         await interaction.followup.send("You need administrator permissions to use this command.")
         return False
     
-    @app_commands.command(name="ai", description="Chat with Kasane Teto AI")
+    @app_commands.command(name="ta;l", description="talk, bitch")
     async def slash_ai(self, interaction: discord.Interaction, prompt: str):
         """Slash command to chat with the AI"""
         await interaction.response.defer()
@@ -322,7 +323,7 @@ class AICog(commands.Cog):
             await interaction.followup.send(response)
         except Exception as e:
             print(f"Error in slash_ai: {e}")
-            await interaction.followup.send("Sorry, something went wrong with the AI response.")
+            await interaction.followup.send(f"Sorry, something went wrong with the AI response. Server Error: {e}.")
     
     @app_commands.command(name="aiconfig", description="Configure your AI settings")
     async def slash_aiconfig(
@@ -421,7 +422,7 @@ class AICog(commands.Cog):
             return
         
         # Let the bot's text commands handle their own messages
-        if message.content.startswith("!"):
+        if message.content.startswith("$"):
             await self.bot.process_commands(message)
             return
         
@@ -463,8 +464,8 @@ class AICog(commands.Cog):
 
 async def setup(bot: commands.Bot):
     # Check if GEMINI_API_KEY is set
-    if not os.getenv("GEMINI_API_KEY"):
-        print("WARNING: GEMINI_API_KEY environment variable is not set. AI functionality will not work properly.")
+    if not os.getenv("AI_API_KEY"):
+        print("WARNING: GEMINI_API_KEY environment variable is not set. AI functionality will not work AT ALL. ")
         print("Get an API key from https://ai.google.dev/")
 
     # Check if SERPAPI_KEY is set
