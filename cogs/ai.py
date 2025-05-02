@@ -399,114 +399,146 @@ class AICog(commands.Cog):
     # --- End API Call ---
 
     # --- Safety and Execution ---
-    def is_safe_command(self, command: str) -> bool:
-        """Check if a shell command is safe to run. Blocks 'cat'."""
-        command = command.strip()
-        if not command:
-             return False # Empty command is not safe/valid
+def is_safe_command(self, command: str) -> bool:
+    """Check if a shell command is safe to run. Blocks 'cat'."""
+    command = command.strip()
+    if not command:
+        return False  # Empty command is not safe/valid
 
-        # Split command into parts for analysis
-        try:
-            # Basic split, doesn't handle complex quoting perfectly but good enough for safety checks
-            parts = command.split()
-            first_command = parts[0].lower() if parts else ""
-        except Exception:
-            return False # Error splitting
+    # Split command into parts for analysis
+    try:
+        # Basic split, doesn't handle complex quoting perfectly but good enough for safety checks
+        parts = command.split()
+        first_command = parts[0].lower() if parts else ""
+    except Exception:
+        return False  # Error splitting
 
-        # 1. Explicitly Disallowed Command Starts
-        disallowed_starts = [
-            "cat", "rm", "del", "mv", "cp", "chmod", "chown", "sudo", "su",
-            "pip", "apt", "yum", "dnf", "pacman", "brew", "npm", "yarn", "gem", "composer",
-            "wget", "curl", # Often used maliciously, block unless specifically needed & validated
-            "mkfs", "fdisk", "mount", "umount", "dd", "format",
-            "shutdown", "reboot", "poweroff", "halt", "systemctl", "service", "init",
-            "kill", "pkill", "killall", "useradd", "userdel", "passwd", "visudo",
-            "ssh", "telnet", "nc", "netcat", "iptables", "ufw", "firewall-cmd",
-            "python", "perl", "ruby", "php", "bash", "sh", "zsh", # Prevent running scripts directly
-            "eval", "exec", "source", ".", # Prevent execution flow changes
-            ":" # Fork bomb prelude
-        ]
-        if first_command in disallowed_starts:
-            print(f"Unsafe command blocked (disallowed start '{first_command}'): {command}")
-            return False
-            
-        # 2. Check for Dangerous Patterns/Characters anywhere in the command string
-        dangerous_patterns = [
-             ";", "|", "&", "`", "$(", "${", # Command separators/execution
-             ">", "<", # Redirection (can overwrite files)
-             "../", # Directory traversal
-             "/etc/", "/root/", "/System/", "/Windows/", # Sensitive paths (crude check)
-             "\\", # Often problematic or used maliciously
-             # Add more as needed
-        ]
-        for pattern in dangerous_patterns:
-             if pattern in command:
-                  print(f"Unsafe command blocked (dangerous pattern '{pattern}' found): {command}")
-                  return False
-
-        # 3. Allow only known safe command starts (Whitelist approach is safer)
-        safe_starts = [
-            "echo", "date", "uptime", "whoami", "hostname", "uname",
-            "pwd", "ls", "dir", "head", "tail", # File listing/viewing (cat is blocked above)
-            "wc", "grep", "find", # Text processing (find can be risky, use with caution)
-            "ping", "traceroute", "tracepath", "mtr", "netstat", "ss", # Network diagnostics
-            "ifconfig", "ipconfig", "ip", # Network info
-            "ps", "top", "htop", "free", "df", "du" # System info
-            # Add more *very carefully* tested safe commands if absolutely necessary
-        ]
-        if first_command in safe_starts:
-            print(f"Command deemed safe: {command}")
-            return True # Command starts with a safe keyword and passed other checks
-
-        # Default to unsafe if not explicitly allowed
-        print(f"Unsafe command blocked (unknown start '{first_command}' or other issue): {command}")
+    # 1. Explicitly Disallowed Command Starts
+    disallowed_starts = [
+        "cat", "rm", "del", "mv", "cp", "chmod", "chown", "sudo", "su",
+        "pip", "apt", "yum", "dnf", "pacman", "brew", "npm", "yarn", "gem", "composer",
+        "wget", "curl",  # Often used maliciously; block unless specifically needed and validated
+        "mkfs", "fdisk", "mount", "umount", "dd", "format",
+        "shutdown", "reboot", "poweroff", "halt", "systemctl", "service", "init",
+        "kill", "pkill", "killall", "useradd", "userdel", "passwd", "visudo",
+        "ssh", "telnet", "nc", "netcat", "iptables", "ufw", "firewall-cmd",
+        "python", "perl", "ruby", "php", "bash", "sh", "zsh",  # Prevent running scripts directly
+        "eval", "exec", "source", ".",  # Prevent execution flow changes
+        ":",  # Fork bomb prelude
+        # SSH and remote-connection specific commands:
+        "scp",            # Secure copy over SSH
+        "sftp",           # Secure file transfer protocol over SSH (client)
+        "rsync",          # Often used over SSH for file synchronization
+        "ssh-keygen",     # Generate SSH key pairs
+        "ssh-copy-id",    # Copy public SSH key to a remote host
+        "ssh-agent",      # Manage SSH keys in a session
+        "ssh-add",        # Add private keys to the SSH agent
+        "sshd",           # OpenSSH daemon (server)
+        "ssh-config",     # Configuration of SSH client settings (usually a file but can be called)
+        "sshd-keygen",    # Generates host keys for SSH daemon if available
+        "ssh-keyscan",    # Gather SSH public keys from remote hosts
+        "sshpass",        # Non-interactive password provider for SSH
+        "sshrc",          # Configuration file executed on SSH login
+        "sshuttle",       # VPN-like tunnel over SSH
+        "autossh",        # Automatically restarts SSH tunnels
+        "sshfs",          # Mount remote filesystem over SSH
+        "mosh",           # Mobile shell for more robust remote sessions
+        "tmate",          # Instant terminal sharing over SSH
+        "proxyjump",      # SSH option for jumping through an intermediary host
+        "slogin",         # An older synonym for SSH in some systems
+        "rlogin",         # Remote login (pre-SSH; still present in some legacy systems)
+        "rsh",            # Remote shell command (legacy; less secure)
+        "sftp-server",    # The server-side component for SFTP
+        "ssh-askpass",    # Graphical password prompt for SSH (if running in GUI contexts)
+        "dropbear",       # Lightweight SSH server (alternative to OpenSSH)
+        "dbclient"        # Client part of Dropbear SSH suite
+    ]
+    if first_command in disallowed_starts:
+        print(f"Unsafe command blocked (disallowed start '{first_command}'): {command}")
         return False
 
-    async def run_shell_command(self, command: str) -> str:
-        """Run a shell command and return the output, ensuring safety checks passed first."""
-        # Safety check should be done *before* calling this method now
-        # This method now assumes the command passed is_safe_command
-        process = None
-        try:
-            process = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                limit=1024*100 # Limit buffer size
-            )
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10.0)
-            
-            stdout_str = stdout.decode('utf-8', errors='replace').strip()
-            stderr_str = stderr.decode('utf-8', errors='replace').strip()
+    # 2. Check for Dangerous Patterns/Characters anywhere in the command string
+    dangerous_patterns = [
+        ";", "|", "&", "`", "$(", "${",  # Command separators/execution
+        ">", "<",  # Redirection (can overwrite files)
+        "../",  # Directory traversal
+        "/etc/", "/root/", "/System/", "/Windows/",  # Sensitive paths (crude check)
+        "\\",  # Often problematic or used maliciously
+        # Add more as needed
+    ]
+    for pattern in dangerous_patterns:
+        if pattern in command:
+            print(f"Unsafe command blocked (dangerous pattern '{pattern}' found): {command}")
+            return False
 
-            if process.returncode == 0:
-                output = stdout_str if stdout_str else "(Command ran successfully with no output)"
-                if stderr_str: output += f"\n[Stderr: {stderr_str}]" # Include stderr even on success
-            else:
-                output = f"(Command failed with exit code {process.returncode})"
-                # Prioritize stderr for error message, but include stdout if stderr is empty
-                error_details = stderr_str if stderr_str else stdout_str
-                if error_details:
-                     output += f"\nOutput/Error:\n{error_details}"
+    # 3. Allow only known safe command starts (Whitelist approach is safer)
+    safe_starts = [
+        "echo", "date", "uptime", "whoami", "hostname", "uname",
+        "pwd", "ls", "dir", "head", "tail",  # File listing/viewing (cat is blocked above)
+        "wc", "grep", "find",  # Text processing (find can be risky, use with caution)
+        "ping", "traceroute", "tracepath", "mtr", "netstat", "ss",  # Network diagnostics
+        "ifconfig", "ipconfig", "ip",  # Network info
+        "ps", "top", "htop", "free", "df", "du"  # System info
+        # Add more *very carefully* tested safe commands if absolutely necessary
+    ]
+    if first_command in safe_starts:
+        print(f"Command deemed safe: {command}")
+        return True  # Command starts with a safe keyword and passed other checks
 
-            max_output_len = 1500
-            if len(output) > max_output_len:
-                output = output[:max_output_len - 20] + f"... (truncated {len(output) - max_output_len} chars)"
-            
-            return output
+    # Default to unsafe if not explicitly allowed
+    print(f"Unsafe command blocked (unknown start '{first_command}' or other issue): {command}")
+    return False
 
-        except asyncio.TimeoutError:
-            # Terminate process if timed out
-            if process.returncode is None:
-                try: process.terminate(); await process.wait()
-                except ProcessLookupError: pass 
-                except Exception as term_err: print(f"Error terminating process: {term_err}")
-            return "Error: Command timed out after 10 seconds."
-        except FileNotFoundError:
-             return f"Error: Command not found or invalid: '{command.split()[0]}'"
-        except Exception as e:
-            return f"Error running command: {str(e)}"
-    # -------------------------
+async def run_shell_command(self, command: str) -> str:
+    """Run a shell command and return the output, ensuring safety checks passed first."""
+    # Safety check should be done *before* calling this method now
+    # This method now assumes the command passed is_safe_command
+    process = None
+    try:
+        process = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            limit=1024*100  # Limit buffer size
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10.0)
+
+        stdout_str = stdout.decode('utf-8', errors='replace').strip()
+        stderr_str = stderr.decode('utf-8', errors='replace').strip()
+
+        if process.returncode == 0:
+            output = stdout_str if stdout_str else "(Command ran successfully with no output)"
+            if stderr_str:
+                output += f"\n[Stderr: {stderr_str}]"  # Include stderr even on success
+        else:
+            output = f"(Command failed with exit code {process.returncode})"
+            # Prioritize stderr for error message, but include stdout if stderr is empty
+            error_details = stderr_str if stderr_str else stdout_str
+            if error_details:
+                output += f"\nOutput/Error:\n{error_details}"
+
+        max_output_len = 1500
+        if len(output) > max_output_len:
+            output = output[:max_output_len - 20] + f"... (truncated {len(output) - max_output_len} chars)"
+
+        return output
+
+    except asyncio.TimeoutError:
+        # Terminate process if timed out
+        if process and process.returncode is None:
+            try:
+                process.terminate()
+                await process.wait()
+            except ProcessLookupError:
+                pass
+            except Exception as term_err:
+                print(f"Error terminating process: {term_err}")
+        return "Error: Command timed out after 10 seconds."
+    except FileNotFoundError:
+        return f"Error: Command not found or invalid: '{command.split()[0]}'"
+    except Exception as e:
+        return f"Error running command: {str(e)}"
+# -------------------------
 
     # --- Other Methods (timeout_user, search_internet, check_admin_permissions - Unchanged) ---
     async def timeout_user(self, guild_id: int, user_id: int, minutes: int) -> bool:
