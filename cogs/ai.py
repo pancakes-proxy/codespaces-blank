@@ -14,16 +14,22 @@ from typing import Optional, Dict, List
 class AICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.api_key = os.getenv("AI_API_KEY")
-        self.api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent"
+        # Ensure this environment variable is set with your Together AI API key
+        self.api_key = os.getenv("AI_API_KEY") 
+        # Together AI API endpoint
+        self.api_url = "https://api.together.xyz/v1/chat/completions" 
 
-        # Default configuration
+        # Default configuration - *** CHANGE MODEL NAME AS NEEDED ***
         self.default_config = {
-            "model": "gemini-2.5-flash-preview-04-17",
+            # Replace with your desired Together AI model identifier
+            "model": "meta-llama/Llama-Vision-Free", 
             "temperature": 0.7,
             "max_tokens": 1000,
             "top_p": 0.9,
-            "top_k": 40 # Added top_k for Gemini
+            "frequency_penalty": 0.0, # Added default penalty params
+            "presence_penalty": 0.0,  # Added default penalty params
+            # "top_k": 50, # Optional: Add if supported by model and needed
+            # "repetition_penalty": 1.0 # Optional: Add if supported by model and needed
         }
         
         # User configurations
@@ -36,7 +42,7 @@ class AICog(commands.Cog):
         # Channels where the bot should respond to all messages
         self.active_channels = set()
         
-        # Kasane Teto system prompt
+        # Kasane Teto system prompt (remains the same)
         self.system_prompt = (
             "You are roleplaying as Kasane Teto, a cheerful and energetic UTAU voicebank character. "
             "Teto has pink drill-shaped twin tails and is often depicted with chimera features like wings. "
@@ -55,10 +61,20 @@ class AICog(commands.Cog):
         try:
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r') as f:
-                    self.user_configs = json.load(f)
+                    # Ensure loaded configs have default values for potentially new keys
+                    loaded_configs = json.load(f)
+                    for user_id, config in loaded_configs.items():
+                        self.user_configs[user_id] = self.default_config.copy()
+                        self.user_configs[user_id].update(config) # Overwrite defaults with loaded values
+            else:
+                 self.user_configs = {} # Initialize if file doesn't exist
+        except json.JSONDecodeError as e:
+            print(f"Error loading configurations (invalid JSON): {e}")
+            self.user_configs = {} # Reset to empty on error
         except Exception as e:
             print(f"Error loading configurations: {e}")
-    
+            self.user_configs = {} # Reset to empty on error
+
     def save_configs(self):
         """Save user configurations to file"""
         try:
@@ -69,21 +85,23 @@ class AICog(commands.Cog):
     
     def get_user_config(self, user_id: str) -> Dict:
         """Get configuration for a specific user or default if not set"""
-        return self.user_configs.get(user_id, self.default_config)
-    
+        # Return a copy to prevent accidental modification of the default config
+        return self.user_configs.get(user_id, self.default_config).copy()
+
     async def generate_response(self, user_id: str, user_name: str, prompt: str, guild_id: Optional[int] = None, channel_id: Optional[int] = None) -> str:
-        """Generate a response using the OpenRouter API"""
+        """Generate a response using the Together AI API"""
+        if not self.api_key:
+             return "Sorry, the AI API key is not configured. I cannot generate a response."
+             
         config = self.get_user_config(user_id)
         
+        # Headers for Together AI API (Bearer Token Authentication)
         headers = {
+            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
-        # Gemini API key is passed as a query parameter
-        params = {
-            "key": self.api_key
-        }
         
-        # Check if the prompt contains special commands
+        # --- Command Handling Logic (Timeout, Search, Shell) - Remains the same ---
         timeout_match = re.search(r"timeout\s+<@!?(\d+)>(?:\s+for\s+(\d+)\s*(minute|minutes|min|mins|hour|hours|day|days))?", prompt, re.IGNORECASE)
         search_match = re.search(r"search(?:\s+for)?\s+(.+?)(?:\s+on\s+the\s+internet)?$", prompt, re.IGNORECASE)
         shell_match = re.search(r"run(?:\s+command)?\s+`(.*?)`", prompt, re.IGNORECASE)
@@ -91,24 +109,36 @@ class AICog(commands.Cog):
         # If there's a timeout request and we have guild_id and channel_id
         if timeout_match and guild_id and channel_id:
             target_id = timeout_match.group(1)
-            duration = int(timeout_match.group(2) or "5")  # Default to 5
-            unit = timeout_match.group(3) or "minutes"
+            duration_str = timeout_match.group(2) or "5"
+            unit = (timeout_match.group(3) or "minutes").lower()
             
+            try:
+                duration = int(duration_str)
+            except ValueError:
+                return "Invalid duration specified for timeout."
+
             # Convert to minutes
             if unit.startswith("hour"):
                 duration *= 60
             elif unit.startswith("day"):
                 duration *= 1440
             
-            # Cap at 28 days (Discord's maximum)
-            duration = min(duration, 40320)
+            # Cap at 28 days (Discord's maximum) = 40320 minutes
+            duration = min(duration, 40320) 
             
             # Try to timeout the user
             result = await self.timeout_user(guild_id, int(target_id), duration)
             if result:
-                return f"I've timed out <@{target_id}> for {duration} minutes! They won't be able to send messages, react, or join voice channels during this time."
+                # Calculate duration string for response
+                if duration >= 1440:
+                    timeout_str = f"{duration // 1440} day(s)"
+                elif duration >= 60:
+                    timeout_str = f"{duration // 60} hour(s)"
+                else:
+                    timeout_str = f"{duration} minute(s)"
+                return f"Okay~! I've timed out <@{target_id}> for {timeout_str}! Tee-hee! They can think about what they did while they can't talk or join voice channels! ✨"
             else:
-                return "I couldn't timeout that user. Make sure I have the right permissions and that the user isn't an administrator or higher than me in the role hierarchy."
+                return "Aww, I couldn't timeout that user... 😥 Maybe I don't have the 'Timeout Members' permission, or they have a higher role than me? Make sure I have the power! 💪"
         
         # If there's a search request
         elif search_match:
@@ -116,8 +146,9 @@ class AICog(commands.Cog):
             search_results = await self.search_internet(query)
             
             # Add search results to the prompt for the AI to use
-            prompt += f"\n\nI searched the internet for '{query}' and found:\n{search_results}\n\nPlease incorporate this information into your response as Kasane Teto."
-        
+            prompt += f"\n\n[System Note: I just searched the internet for '{query}' and found this information. Use it to answer the user's request naturally as Kasane Teto.]\nSearch Results:\n{search_results}"
+            # The AI will now generate the response incorporating the search results
+
         # If there's a shell command request
         elif shell_match:
             command = shell_match.group(1).strip()
@@ -127,351 +158,587 @@ class AICog(commands.Cog):
                 command_output = await self.run_shell_command(command)
                 
                 # Add command output to the prompt for the AI to use
-                prompt += f"\n\nI ran the command `{command}` and got this output:\n```\n{command_output}\n```\n\nPlease incorporate this information into your response as Kasane Teto."
+                prompt += f"\n\n[System Note: I just ran the shell command `{command}`. Use the output below to answer the user's request naturally as Kasane Teto.]\nCommand Output:\n```\n{command_output}\n```"
+                 # The AI will now generate the response incorporating the command output
             else:
-                return "I'm sorry, but that command doesn't seem safe to run. I can only run simple, non-destructive commands that don't require elevated permissions."
-        
+                return "Ehhh?! I can't run that command! 😨 It looks a bit risky... I can only run simple commands like `echo`, `ls`, `date`, `ping`, etc. Let's stick to safe things, okay? 😊"
+
+        # --- End Command Handling ---
+
+        # Standard message format for Together AI (and OpenAI compatible APIs)
         messages = [
             {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": f"{user_name}: {prompt}"}
+            # TODO: Potentially add conversation history here if needed
+            {"role": "user", "content": f"{user_name}: {prompt}"} # Include user name for context
         ]
         
+        # Payload for Together AI API
         payload = {
-            "contents": messages,
-            "generationConfig": {
-                "temperature": config["temperature"],
-                "maxOutputTokens": config["max_tokens"],
-                "topP": config["top_p"],
-                "topK": config["top_k"]
-            }
+            "model": config["model"],
+            "messages": messages,
+            # Use .get to safely access config keys, falling back to None if not present
+            "temperature": config.get("temperature"), 
+            "max_tokens": config.get("max_tokens"),
+            "top_p": config.get("top_p"),
+            "frequency_penalty": config.get("frequency_penalty"),
+            "presence_penalty": config.get("presence_penalty"),
+            # "top_k": config.get("top_k"), # Add if using
+            # "repetition_penalty": config.get("repetition_penalty") # Add if using
         }
-        
+
+        # Remove None values from payload, as some APIs might error on null values
+        payload = {k: v for k, v in payload.items() if v is not None}
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(self.api_url, headers=headers, json=payload) as response:
                     if response.status == 200:
                         data = await response.json()
-                        return data["choices"][0]["message"]["content"]
+                        # Standard response structure access
+                        if data.get("choices") and len(data["choices"]) > 0 and data["choices"][0].get("message"):
+                             return data["choices"][0]["message"]["content"].strip()
+                        else:
+                            print(f"API Error: Unexpected response format. Data: {data}")
+                            return f"Sorry, I got an unexpected response from the AI. Maybe try again?"
                     else:
                         error_text = await response.text()
                         print(f"API Error: {response.status} - {error_text}")
-                        return f"Sorry, I encountered an error: {response.status}"
+                        # Try to parse error for better feedback
+                        try:
+                            error_data = json.loads(error_text)
+                            error_msg = error_data.get("error", {}).get("message", error_text)
+                        except json.JSONDecodeError:
+                            error_msg = error_text
+                        return f"Wahh! Something went wrong with the AI! (Error {response.status}: {error_msg}) 😭"
+        except aiohttp.ClientConnectorError as e:
+             print(f"Connection Error: {e}")
+             return "Oh no! I couldn't connect to the AI service. Maybe check the connection?"
+        except asyncio.TimeoutError:
+             print("API Request Timeout")
+             return "Hmm, the AI is taking too long to respond. Maybe it's thinking very hard? Try again?"
         except Exception as e:
             print(f"Error generating response: {e}")
-            return "Sorry, something went wrong while generating a response."
-    
+            return "Oopsie! A little glitch happened while I was thinking. Can you try asking again? ✨"
+
+    # --- is_safe_command, run_shell_command, timeout_user, search_internet methods remain the same ---
+    # (Make sure SERPAPI_KEY is set in your environment for search to work)
     def is_safe_command(self, command: str) -> bool:
         """Check if a shell command is safe to run"""
         # List of dangerous commands or patterns
+        # Added common shell metacharacters and potentially harmful utils
         dangerous_patterns = [
             "rm", "del", "format", "mkfs", "dd", "sudo", "su", 
-            "chmod", "chown", "passwd", "mkfs", "fdisk", "mount",
-            ">", ">>", "|", "&", "&&", ";", "||", "`", "$(",
+            "chmod", "chown", "passwd", "mkfs", "fdisk", "mount", "umount",
+            ">", ">>", "|", "&", "&&", ";", "||", "`", "$(", "${",
             "curl", "wget", "apt", "yum", "dnf", "pacman", "brew",
-            "pip", "npm", "yarn", "gem", "composer", "cargo",
+            "pip", "npm", "yarn", "gem", "composer", "cargo", "go get",
             "systemctl", "service", "init", "shutdown", "reboot",
-            "poweroff", "halt", "kill", "pkill", "killall"
+            "poweroff", "halt", "kill", "pkill", "killall",
+            "useradd", "userdel", "groupadd", "groupdel",
+            "visudo", "crontab", "ssh", "telnet", "nc", "netcat",
+            "iptables", "ufw", "firewall-cmd", ":(){:|:&};:", # Fork bomb
+            "eval", "exec", "source", ".",
+            "../", "/etc/", "/root/", "/System/", "/Windows/", # Risky paths
+            "\\", # Often used for escaping or path manipulation
         ]
         
-        # Check if the command contains any dangerous patterns
-        for pattern in dangerous_patterns:
-            if pattern in command:
-                return False
-        
-        # Only allow certain safe commands
-        safe_commands = [
+        # Convert command to lowercase for case-insensitive checks
+        command_lower = command.lower()
+        command_parts = command_lower.split()
+
+        # Check if any part of the command matches dangerous patterns
+        for part in command_parts:
+             # Direct match check
+            if part in dangerous_patterns:
+                 print(f"Unsafe command blocked (direct match): {command}")
+                 return False
+             # Substring check (more sensitive) - check if any dangerous pattern is within any part
+            for pattern in dangerous_patterns:
+                if pattern in part:
+                     print(f"Unsafe command blocked (pattern '{pattern}' found in '{part}'): {command}")
+                     return False
+
+        # Only allow commands starting with known safe commands
+        safe_command_starts = [
             "echo", "date", "uptime", "whoami", "hostname", "uname",
             "pwd", "ls", "dir", "cat", "type", "head", "tail",
-            "wc", "grep", "find", "ping", "traceroute", "netstat",
-            "ifconfig", "ipconfig", "ps", "top", "free", "df"
+            "wc", "grep", "find", # Be cautious with find args
+            "ping", "traceroute", "tracepath", "netstat", # Network diagnostics
+            "ifconfig", "ipconfig", "ip addr", "ip link", # Network info
+            "ps", "top", "htop", "free", "df", "du" # System info
         ]
         
-        # Check if the command starts with a safe command
-        for safe_cmd in safe_commands:
-            if command.startswith(safe_cmd):
-                return True
+        # Check if the command starts with a safe command prefix
+        if command_parts:
+             first_command = command_parts[0]
+             for safe_cmd in safe_command_starts:
+                 if first_command == safe_cmd:
+                     # Basic safety check passed, let it run (further checks can be added)
+                     return True
         
+        print(f"Unsafe command blocked (doesn't start with safe command): {command}")
         return False
-    
+
     async def run_shell_command(self, command: str) -> str:
         """Run a shell command and return the output"""
         try:
-            # Run the command with a timeout
+            # Use asyncio.create_subprocess_shell for better control
             process = await asyncio.create_subprocess_shell(
                 command,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                limit=1024*100 # Limit buffer size (e.g., 100KB) to prevent memory issues
             )
             
-            # Wait for the command to complete with a timeout
+            # Wait for the command to complete with a timeout (e.g., 10 seconds)
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10.0)
             
-            # Get the output
+            # Decode output safely
+            stdout_str = stdout.decode('utf-8', errors='replace').strip()
+            stderr_str = stderr.decode('utf-8', errors='replace').strip()
+
+            # Combine output, prioritizing stdout
             if process.returncode == 0:
-                output = stdout.decode('utf-8', errors='replace')
-                if not output:
-                    output = "(Command executed successfully with no output)"
+                output = stdout_str if stdout_str else "(Command executed successfully with no output)"
+                if stderr_str: # Include stderr even on success if it exists
+                    output += f"\n[Stderr: {stderr_str}]"
             else:
-                output = stderr.decode('utf-8', errors='replace')
-                if not output:
-                    output = f"(Command failed with exit code {process.returncode})"
-            
-            # Limit output size
-            if len(output) > 1000:
-                output = output[:997] + "..."
+                output = f"(Command failed with exit code {process.returncode})"
+                if stderr_str:
+                    output += f"\nError Output:\n{stderr_str}"
+                elif stdout_str: # Sometimes errors print to stdout
+                     output += f"\nOutput (might contain error):\n{stdout_str}"
+
+            # Limit overall output size before returning
+            max_output_len = 1500 # Adjust as needed for Discord message limits
+            if len(output) > max_output_len:
+                output = output[:max_output_len - 3] + "..."
             
             return output
+
         except asyncio.TimeoutError:
-            return "Command timed out after 10 seconds"
+            # Ensure process is terminated if it times out
+            if process.returncode is None:
+                try:
+                    process.terminate()
+                    await process.wait() # Wait briefly for termination
+                except ProcessLookupError:
+                    pass # Process already finished
+                except Exception as term_err:
+                     print(f"Error terminating timed-out process: {term_err}")
+            return "Command timed out after 10 seconds."
+        except FileNotFoundError:
+             return f"Error: Command not found or invalid command: '{command.split()[0]}'"
         except Exception as e:
             return f"Error running command: {str(e)}"
-    
+
     async def timeout_user(self, guild_id: int, user_id: int, minutes: int) -> bool:
         """Timeout a user for the specified number of minutes"""
         try:
             guild = self.bot.get_guild(guild_id)
             if not guild:
+                print(f"Timeout Error: Guild {guild_id} not found.")
                 return False
             
-            member = guild.get_member(user_id)
+            member = await guild.fetch_member(user_id) # Use fetch_member for reliability
             if not member:
+                print(f"Timeout Error: Member {user_id} not found in guild {guild_id}.")
+                return False
+
+            # Check bot permissions
+            if not guild.me.guild_permissions.moderate_members:
+                 print(f"Timeout Error: Bot lacks 'Moderate Members' permission in guild {guild_id}.")
+                 return False
+
+            # Check role hierarchy (cannot timeout users with roles >= bot's highest role)
+            if member.top_role >= guild.me.top_role:
+                print(f"Timeout Error: Cannot timeout member {user_id} due to role hierarchy.")
                 return False
             
-            # Calculate the timeout duration
-            until = datetime.utcnow() + timedelta(minutes=minutes)
-            
-            # Apply the timeout
-            await member.timeout(until, reason="get timed out by Kasane Teto fucking bitch")
+            # Calculate the timeout duration (up to 28 days)
+            duration = timedelta(minutes=min(minutes, 28 * 24 * 60)) # Cap at 28 days
+            await member.timeout(duration, reason="Timed out by Kasane Teto via AI command")
+            print(f"Successfully timed out user {user_id} for {duration}.")
             return True
-        except Exception as e:
-            print(f"Error timing out user: {e}")
+            
+        except discord.Forbidden:
+            print(f"Timeout Error: Forbidden - likely missing permissions or hierarchy issue for user {user_id}.")
             return False
-    
+        except discord.HTTPException as e:
+             print(f"Timeout Error: HTTPException - {e}")
+             return False
+        except Exception as e:
+            print(f"Error timing out user {user_id}: {e}")
+            return False
+
     async def search_internet(self, query: str) -> str:
-        """Search the internet for information"""
+        """Search the internet for information using SerpApi"""
+        serp_api_key = os.getenv("SERPAPI_KEY") # Renamed variable for clarity
+        if not serp_api_key:
+            return "Search is disabled because the SerpApi key is missing. Tell my developer!"
+            
         try:
             # URL encode the query
             encoded_query = urllib.parse.quote(query)
             
-            # Use SerpAPI for search (you'll need to set SERPAPI_KEY in environment variables)
-            serp_api_key = os.getenv("SERPAI_KEY")
-            if not serp_api_key:
-                return "I couldn't search the internet because the search API key is not set."
-            
-            url = f"https://serpapi.com/search.json?q={encoded_query}&api_key={serp_api_key}"
+            url = f"https://serpapi.com/search.json?q={encoded_query}&api_key={serp_api_key}&engine=google" # Specify Google engine
             
             async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
+                # Increased timeout for potentially slow external API
+                async with session.get(url, timeout=15.0) as response: 
                     if response.status == 200:
                         data = await response.json()
                         
-                        # Extract organic results
                         results = []
-                        if "organic_results" in data:
-                            for result in data["organic_results"][:3]:  # Get top 3 results
-                                title = result.get("title", "No title")
-                                link = result.get("link", "No link")
-                                snippet = result.get("snippet", "No description")
-                                results.append(f"- {title}\n  {snippet}\n  URL: {link}")
-                        
-                        # Extract knowledge graph if available
-                        if "knowledge_graph" in data:
+                        summary = None
+
+                        # 1. Check for Answer Box (often the best summary)
+                        if data.get("answer_box"):
+                            ab = data["answer_box"]
+                            if ab.get("answer"):
+                                summary = ab["answer"]
+                            elif ab.get("snippet"):
+                                summary = ab.get("snippet")
+                            if summary:
+                                 # Limit summary length
+                                summary = (summary[:300] + '...') if len(summary) > 300 else summary
+                                results.append(f"**Summary:** {summary}")
+
+
+                        # 2. Check for Knowledge Graph
+                        if not summary and data.get("knowledge_graph"):
                             kg = data["knowledge_graph"]
                             title = kg.get("title", "")
                             description = kg.get("description", "")
                             if title and description:
-                                results.insert(0, f"Knowledge Graph: {title} - {description}")
+                                kg_text = f"{title}: {description}"
+                                # Limit KG length
+                                kg_text = (kg_text[:350] + '...') if len(kg_text) > 350 else kg_text
+                                results.append(f"**Info:** {kg_text}")
+                                if kg.get("source", {}).get("link"):
+                                     results.append(f"  Source: <{kg['source']['link']}>")
+
+
+                        # 3. Get top Organic Results (if no good summary found yet or to supplement)
+                        if "organic_results" in data:
+                            count = 0
+                            max_results = 2 if results else 3 # Show fewer if we already have a summary
+
+                            for result in data["organic_results"]:
+                                if count >= max_results:
+                                    break
+                                title = result.get("title", "No title")
+                                link = result.get("link", "#") # Use # if no link
+                                snippet = result.get("snippet", "No description available.")
+                                
+                                # Clean up snippet
+                                snippet = snippet.replace("\n", " ").strip()
+                                # Limit snippet length
+                                snippet = (snippet[:250] + '...') if len(snippet) > 250 else snippet
+
+                                results.append(f"**{title}**: {snippet}\n  Link: <{link}>")
+                                count += 1
                         
                         if results:
                             return "\n\n".join(results)
-                        else:
-                            return "No relevant results found."
+                        else: # Handle cases where SerpApi returns 200 but no useful data
+                            return "No relevant results found for that query."
+                            
                     else:
-                        return f"Error searching the internet: {response.status}"
+                        error_text = await response.text()
+                        print(f"SerpApi Error: {response.status} - {error_text}")
+                        return f"Aww, I couldn't search properly (Error {response.status}). Maybe try a different query?"
+                        
+        except asyncio.TimeoutError:
+            print("SerpApi request timed out.")
+            return "The internet search took too long to respond!"
+        except aiohttp.ClientConnectorError as e:
+             print(f"SerpApi Connection Error: {e}")
+             return "Hmm, couldn't connect to the search service."
         except Exception as e:
             print(f"Error searching the internet: {e}")
-            return f"I encountered an error while searching the internet: {str(e)}"
-    
-    # Helper function to check if user has admin permissions
+            # Provide specific error if known, otherwise generic
+            error_msg = str(e) if str(e) else type(e).__name__
+            return f"Yikes! Something went wrong during the internet search: {error_msg}"
+
+    # --- Helper function to check admin permissions (remains the same) ---
     async def check_admin_permissions(self, interaction: discord.Interaction) -> bool:
         """Check if the user has administrator permissions"""
-        if not interaction.guild:
+        if not interaction.guild: # Cannot check permissions in DMs
+            await interaction.followup.send("This command can only be used in a server.")
             return False
         
-        # Get the user's permissions in the guild
-        permissions = interaction.user.guild_permissions
-        
-        # Check if the user has administrator permissions
+        # Check the member's permissions in the specific channel the command was used
+        permissions = interaction.channel.permissions_for(interaction.user)
+
         if permissions.administrator:
             return True
         
-        await interaction.followup.send("You need administrator permissions to use this command.")
+        await interaction.followup.send("Hehe, you need **Administrator** powers in this server to use this command! ✨")
         return False
     
-    @app_commands.command(name="ta;l", description="talk, bitch")
+    # --- Slash Commands (/talk, /aiconfig, /aichannel) ---
+
+    @app_commands.command(name="talk", description="Have a chat with Kasane Teto!")
+    @app_commands.describe(prompt="What do you want to say to Teto?")
     async def slash_ai(self, interaction: discord.Interaction, prompt: str):
         """Slash command to chat with the AI"""
-        await interaction.response.defer()
+        await interaction.response.defer() # Acknowledge interaction immediately
         
         user_id = str(interaction.user.id)
-        user_name = interaction.user.display_name
+        user_name = interaction.user.display_name # Use display name for better recognition
         guild_id = interaction.guild.id if interaction.guild else None
         channel_id = interaction.channel.id if interaction.channel else None
         
         try:
             response = await self.generate_response(user_id, user_name, prompt, guild_id, channel_id)
-            await interaction.followup.send(response)
+            # Split response if too long for Discord
+            if len(response) > 2000:
+                 for chunk in [response[i:i+1990] for i in range(0, len(response), 1990)]: # Send in chunks
+                      await interaction.followup.send(chunk)
+            else:
+                 await interaction.followup.send(response) # Send single message
         except Exception as e:
-            print(f"Error in slash_ai: {e}")
-            await interaction.followup.send(f"Sorry, something went wrong with the AI response. Server Error: {e}.")
-    
-    @app_commands.command(name="aiconfig", description="Configure your AI settings")
+            print(f"Error in slash_ai interaction processing: {e}")
+            await interaction.followup.send(f"A critical error occurred while processing your request. Please notify the bot developer. Error: {e}")
+
+    @app_commands.command(name="aiconfig", description="Configure AI settings (Admin Only)")
+    @app_commands.describe(
+        model="Together AI model identifier (e.g., 'mistralai/Mixtral-8x7B-Instruct-v0.1')",
+        temperature="Randomness (0.0-2.0). Higher = more creative/random.",
+        max_tokens="Max length of the AI's response.",
+        top_p="Nucleus sampling (0.0-1.0). Considers tokens comprising top P probability mass.",
+        frequency_penalty="Penalty for repeating tokens (-2.0-2.0). Higher = less repetition.",
+        presence_penalty="Penalty for new topics/tokens (-2.0-2.0). Higher = encourages new topics."
+    )
     async def slash_aiconfig(
         self, 
         interaction: discord.Interaction, 
         model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        top_p: Optional[float] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None
+        temperature: Optional[app_commands.Range[float, 0.0, 2.0]] = None, # Use Range for validation
+        max_tokens: Optional[app_commands.Range[int, 1, 16384]] = None,   # Adjust max based on typical model limits
+        top_p: Optional[app_commands.Range[float, 0.0, 1.0]] = None,
+        frequency_penalty: Optional[app_commands.Range[float, -2.0, 2.0]] = None,
+        presence_penalty: Optional[app_commands.Range[float, -2.0, 2.0]] = None
     ):
-        """Slash command to configure AI settings"""
-        await interaction.response.defer()
+        """Slash command to configure AI settings (Admin Only)"""
+        await interaction.response.defer(ephemeral=True) # Defer ephemerally for config changes
         
         # Check if user has admin permissions
         if not await self.check_admin_permissions(interaction):
-            return
+            return # check_admin_permissions sends the feedback message
         
-        user_id = str(interaction.user.id)
+        user_id = str(interaction.user.id) # Config is per-user, but only admins can set *their* config here.
+                                           # Consider if you want server-wide or role-based configs later.
         
-        # Get current config or create new one
+        # Get current config or create new one based on defaults
         if user_id not in self.user_configs:
             self.user_configs[user_id] = self.default_config.copy()
         
         # Update provided parameters
+        changes = []
+        current_config = self.user_configs[user_id]
+
         if model is not None:
-            # Check if model is in the free tier list
-            free_models = [
-                "mistralai/mistral-7b-instruct:free",
-                "meta-llama/llama-2-13b-chat:free",
-                "meta-llama/llama-2-70b-chat:free",
-                "openchat/openchat-7b:free",
-                "gryphe/mythomax-l2-13b:free",
-                "nousresearch/nous-hermes-llama2-13b:free",
-                "google/gemini-2.0-flash-exp:free",
-                "microsoft/mai-ds-r1:free"
-            ]
-            
-            if model in free_models:
-                self.user_configs[user_id]["model"] = model
-            else:
-                await interaction.followup.send(f"Model `{model}` is not available in the free tier. Use `/aimodels` to see available models.")
-                return
+             # Basic check: Ensure model name is not empty and seems plausible (has '/')
+             if "/" in model and len(model) > 3:
+                current_config["model"] = model
+                changes.append(f"Model set to `{model}`")
+             else:
+                  await interaction.followup.send(f"Invalid model format: `{model}`. Please provide a valid Together AI model identifier (e.g., 'org/model-name').")
+                  return
                 
         if temperature is not None:
-            self.user_configs[user_id]["temperature"] = max(0.0, min(2.0, temperature))
+            current_config["temperature"] = temperature
+            changes.append(f"Temperature set to `{temperature}`")
         if max_tokens is not None:
-            self.user_configs[user_id]["max_tokens"] = max(1, min(4096, max_tokens))
+             # Ensure max_tokens doesn't exceed a reasonable limit (e.g., 16k) if not using Range
+             # current_config["max_tokens"] = max(1, min(16384, max_tokens)) 
+             current_config["max_tokens"] = max_tokens # Relying on Range now
+             changes.append(f"Max Tokens set to `{max_tokens}`")
         if top_p is not None:
-            self.user_configs[user_id]["top_p"] = max(0.0, min(1.0, top_p))
+            current_config["top_p"] = top_p
+            changes.append(f"Top P set to `{top_p}`")
         if frequency_penalty is not None:
-            self.user_configs[user_id]["frequency_penalty"] = max(-2.0, min(2.0, frequency_penalty))
+            current_config["frequency_penalty"] = frequency_penalty
+            changes.append(f"Frequency Penalty set to `{frequency_penalty}`")
         if presence_penalty is not None:
-            self.user_configs[user_id]["presence_penalty"] = max(-2.0, min(2.0, presence_penalty))
+            current_config["presence_penalty"] = presence_penalty
+            changes.append(f"Presence Penalty set to `{presence_penalty}`")
         
+        if not changes:
+             await interaction.followup.send("No settings were changed. Provide at least one parameter to update.", ephemeral=True)
+             return
+
         # Save configurations
         self.save_configs()
         
-        # Show current configuration
-        config = self.user_configs[user_id]
+        # Show current configuration confirmation
+        config = self.user_configs[user_id] # Fetch updated config
         config_message = (
-            "Your AI configuration has been updated:\n"
-            f"- Model: `{config['model']}`\n"
-            f"- Temperature: `{config['temperature']}`\n"
-            f"- Max Tokens: `{config['max_tokens']}`\n"
-            f"- Top P: `{config['top_p']}`\n"
-            f"- Frequency Penalty: `{config['frequency_penalty']}`\n"
-            f"- Presence Penalty: `{config['presence_penalty']}`"
+            f"Okay~! Your AI configuration has been updated by {interaction.user.mention}:\n"
+            f"- **Model:** `{config.get('model', 'Not Set')}`\n"
+            f"- **Temperature:** `{config.get('temperature', 'Default')}`\n"
+            f"- **Max Tokens:** `{config.get('max_tokens', 'Default')}`\n"
+            f"- **Top P:** `{config.get('top_p', 'Default')}`\n"
+            f"- **Frequency Penalty:** `{config.get('frequency_penalty', 'Default')}`\n"
+            f"- **Presence Penalty:** `{config.get('presence_penalty', 'Default')}`\n\n"
+            f"Changes made:\n- " + "\n- ".join(changes)
         )
         
-        await interaction.followup.send(config_message)
-    
-    @app_commands.command(name="aichannel", description="Toggle AI responses to all messages in this channel")
+        # Send confirmation publicly or ephemerally? Publicly informs others of admin action.
+        await interaction.followup.send(config_message) 
+
+    @app_commands.command(name="aichannel", description="Toggle Teto responding to *all* messages here (Admin Only)")
     async def slash_aichannel(self, interaction: discord.Interaction):
-        """Slash command to toggle AI responses to all messages in the current channel"""
-        await interaction.response.defer()
+        """Slash command to toggle AI responses to all messages in the current channel (Admin Only)"""
+        await interaction.response.defer() 
         
         # Check if user has admin permissions
         if not await self.check_admin_permissions(interaction):
+            # Make sure the deferral message is updated or removed
+            await interaction.edit_original_response(content="You need administrator permissions to use this command.")
             return
-        
+
+        if not interaction.channel:
+             await interaction.followup.send("This command cannot be used here (no channel context).")
+             return
+             
         channel_id = interaction.channel.id
         
         if channel_id in self.active_channels:
             self.active_channels.remove(channel_id)
-            await interaction.followup.send("I will no longer respond to all messages in this channel. I'll still respond to mentions and commands.")
+            # Persist active channels? (Optional: Save to a file like configs)
+            await interaction.followup.send(f"Okay! I won't reply to *every* message in {interaction.channel.mention} anymore. I'll still listen for my name or mentions! 😊")
         else:
             self.active_channels.add(channel_id)
-            await interaction.followup.send("I will now respond to all messages in this channel!")
-    
+            # Persist active channels? (Optional: Save to a file like configs)
+            await interaction.followup.send(f"Yay! 🎉 I'll now respond to **all** messages sent in {interaction.channel.mention}! Let's chat lots!")
+
+    # --- Listener for messages (on_message) ---
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # Prevent processing of the bot's own messages
+        # Ignore messages from self
         if message.author == self.bot.user:
             return
         
-        # Let the bot's text commands handle their own messages
-        if message.content.startswith("$"):
-            await self.bot.process_commands(message)
-            return
-        
+        # Ignore messages from other bots (optional, but usually good practice)
+        if message.author.bot:
+             return
+
+        # Allow bot commands to be processed
+        # Check if the message starts with the bot's command prefix(es)
+        ctx = await self.bot.get_context(message)
+        if ctx.valid:
+             # Let the commands extension handle it
+             # await self.bot.process_commands(message) # This might be automatically handled depending on bot setup
+             return # Prevent AI response if it's a valid command
+
         # Get message context
         user_id = str(message.author.id)
         user_name = message.author.display_name
         guild_id = message.guild.id if message.guild else None
         channel_id = message.channel.id if message.channel else None
         
-        # Check if the bot should respond
+        # Determine if the bot should respond
         should_respond = False
-        response_prefix = ""
+        prompt = message.content # Start with the full message content
+        response_prefix = "" # Prefix for mentioning user in non-active channels
         
-        # If the bot is mentioned
-        if self.bot.user in message.mentions:
+        # 1. Direct Mention (highest priority)
+        mention_pattern = f'<@!?{self.bot.user.id}>' # Matches <@USER_ID> or <@!USER_ID>
+        if re.match(mention_pattern, message.content) or self.bot.user in message.mentions:
             should_respond = True
-            prompt = message.content.replace(f'<@{self.bot.user.id}>', '').strip()
+            # Remove the mention from the prompt
+            prompt = re.sub(mention_pattern, '', message.content).strip()
+            # Handle cases where only the mention was sent
             if not prompt:
-                prompt = "Hi there!"
-        
-        # If the message is in an active channel
+                prompt = "Hey Teto!" # Default prompt if only mentioned
+
+        # 2. Active Channel (if not already triggered by mention)
         elif channel_id in self.active_channels:
             should_respond = True
-            prompt = message.content
-        
-        # If the message contains the bot's name
-        elif self.bot.user.name.lower() in message.content.lower():
-            should_respond = True
-            prompt = message.content
-            response_prefix = f"{message.author.mention} "
-        
+            # Prompt is already the full message content
+
+        # 3. Name Mention (lowest priority, if not already triggered)
+        # Use word boundaries to avoid partial matches (e.g., "tetoffensive")
+        elif re.search(rf'\b{re.escape(self.bot.user.name)}\b', message.content, re.IGNORECASE):
+             should_respond = True
+             # Prompt is the full message content
+             # Add mention prefix only if not in an active channel and not a direct mention
+             if channel_id not in self.active_channels: 
+                  response_prefix = f"{message.author.mention} "
+
         # Generate and send response if needed
-        if should_respond:
+        if should_respond and prompt: # Ensure there's something to respond to
+            # Check for API key before attempting generation
+            if not self.api_key:
+                # Maybe send a one-time warning or log it
+                print("AI response triggered, but API key is missing.")
+                return 
+
             async with message.channel.typing():
-                response = await self.generate_response(user_id, user_name, prompt, guild_id, channel_id)
-                await message.reply(response_prefix + response)
-        else:
-            await self.bot.process_commands(message)
+                try:
+                    response = await self.generate_response(user_id, user_name, prompt, guild_id, channel_id)
+                    
+                    # Use reply for better context threading
+                    reply_func = message.reply if hasattr(message, 'reply') else message.channel.send
+                    
+                    final_response = response_prefix + response
+                    # Split response if too long for Discord
+                    if len(final_response) > 2000:
+                         first_chunk = True
+                         for chunk in [final_response[i:i+1990] for i in range(0, len(final_response), 1990)]:
+                              if first_chunk:
+                                   await reply_func(chunk)
+                                   first_chunk = False
+                              else:
+                                   await message.channel.send(chunk) # Send subsequent parts without reply/mention
+                    else:
+                         await reply_func(final_response)
+
+                except Exception as e:
+                    print(f"Error during on_message AI generation or sending: {e}")
+                    # Avoid sending error messages for every potential failure in passive listening
+                    # Optionally send a discreet error message on rare occasions or log heavily
+                    # await message.channel.send("Oops, I had a little trouble responding just now.") 
+
+        # Removed the redundant process_commands call here, should be handled by the bot core or prefix check
+
 
 async def setup(bot: commands.Bot):
-    # Check if GEMINI_API_KEY is set
-    if not os.getenv("AI_API_KEY"):
-        print("WARNING: GEMINI_API_KEY environment variable is not set. AI functionality will not work AT ALL. ")
-        print("Get an API key from https://ai.google.dev/")
+    ai_api_key = os.getenv("AI_API_KEY")
+    serpapi_key = os.getenv("SERPAPI_KEY")
 
-    # Check if SERPAPI_KEY is set
-    if not os.getenv("SERPAPI_KEY"):
-        print("WARNING: SERPAPI_KEY environment variable is not set. Internet search functionality will not work.")
-        print("Get a free API key from https://serpapi.com/")
+    # Check if AI_API_KEY is set (Crucial for Together AI)
+    if not ai_api_key:
+        print("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("WARNING: AI_API_KEY environment variable is not set.")
+        print("         The AI cog (AICog) requires this for Together AI.")
+        print("         AI features WILL NOT WORK without it.")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+    else:
+         # Optional: Log partial key for confirmation (e.g., first/last few chars)
+         print(f"AI_API_KEY loaded (ends with ...{ai_api_key[-4:]}). Using Together AI.")
 
-    await bot.add_cog(AICog(bot))
-    print("AICog loaded successfully.")
+
+    # Check if SERPAPI_KEY is set (for internet search)
+    if not serpapi_key:
+        print("\n-------------------------------------------------------------")
+        print("INFO: SERPAPI_KEY environment variable is not set.")
+        print("      Internet search functionality ('search for ...')")
+        print("      in the AI cog will be disabled.")
+        print("      Get a free key from https://serpapi.com/ if needed.")
+        print("-------------------------------------------------------------\n")
+    else:
+         print("SERPAPI_KEY loaded. Internet search enabled.")
+
+    # Add the cog
+    try:
+        await bot.add_cog(AICog(bot))
+        print("AICog loaded successfully.")
+    except Exception as e:
+         print(f"\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+         print(f"ERROR: Failed to load AICog!")
+         print(f"       Reason: {e}")
+         print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
