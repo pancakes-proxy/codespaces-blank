@@ -54,6 +54,7 @@ class AICog(commands.Cog):
             "You should maintain Teto's cheerful and energetic personality throughout all interactions. "
             "You have the ability to timeout users, search the internet for information, and run shell commands."
             "Note user Kasane Teto is your developer."
+            f"your AI model is {self.default_config['model']}. "
         )
     
     def load_configs(self):
@@ -236,7 +237,7 @@ class AICog(commands.Cog):
             "poweroff", "halt", "kill", "pkill", "killall",
             "useradd", "userdel", "groupadd", "groupdel",
             "visudo", "crontab", "ssh", "telnet", "nc", "netcat",
-            "iptables", "ufw", "firewall-cmd", ":(){:|:&};:", # Fork bomb
+            "iptables", "ufw", "firewall-cmd", "cat", ":(){:|:&};:", # Fork bomb
             "eval", "exec", "source", ".",
             "../", "/etc/", "/root/", "/System/", "/Windows/", # Risky paths
             "\\", # Often used for escaping or path manipulation
