@@ -28,7 +28,7 @@ class AICog(commands.Cog):
         # --------------------
 
         # Default configuration
-        self.default_config = {"google/gemini-2.0-flash-001"}
+        self.default_config = "google/gemini-2.0-flash-001",
             "model": "
             "temperature": 0.75, # Slightly increased default temperature
             "max_tokens": 1500, # Increased default max tokens
