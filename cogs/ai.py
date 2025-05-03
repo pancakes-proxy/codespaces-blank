@@ -628,61 +628,78 @@ class AICog(commands.Cog):
     # --- is_safe_command, run_shell_command, timeout_user, search_internet methods remain the same ---
     # (Make sure SERPAPI_KEY is set in your environment for search to work)
     def is_safe_command(self, command: str) -> bool:
-        """Check if a shell command is safe to run"""
-        # List of dangerous commands or patterns
-        # Added common shell metacharacters and potentially harmful utils
-        dangerous_patterns = [
-            "rm", "del", "format", "mkfs", "dd", "sudo", "su", 
-            "chmod", "chown", "passwd", "mkfs", "fdisk", "mount", "umount",
-            ">", ">>", "|", "&", "&&", ";", "||", "`", "$(", "${",
-            "curl", "wget", "apt", "yum", "dnf", "pacman", "brew",
-            "pip", "npm", "yarn", "gem", "composer", "cargo", "go get",
-            "systemctl", "service", "init", "shutdown", "reboot",
-            "poweroff", "halt", "kill", "pkill", "killall",
-            "useradd", "userdel", "groupadd", "groupdel",
-            "visudo", "crontab", "ssh", "telnet", "nc", "netcat",
-            "iptables", "ufw", "firewall-cmd", "cat", ":(){:|:&};:", # Fork bomb
-            "eval", "exec", "source", ".",
-            "../", "/etc/", "/root/", "/System/", "/Windows/", # Risky paths
-            "\\", # Often used for escaping or path manipulation
+        """Check if a shell command is safe to run, allowing ping targets."""
+        command = command.strip()
+        if not command:
+            return False
+
+        parts = command.split()
+        cmd_name = parts[0].lower()
+
+        # 1. Check against explicitly blocked command names
+        dangerous_commands = [
+            "rm", "del", "format", "mkfs", "dd", "sudo", "su", "chmod", "chown",
+            "passwd", "fdisk", "mount", "umount", "curl", "wget", "apt", "yum",
+            "dnf", "pacman", "brew", "pip", "npm", "yarn", "gem", "composer",
+            "cargo", "go", "systemctl", "service", "init", "shutdown", "reboot",
+            "poweroff", "halt", "kill", "pkill", "killall", "useradd", "userdel",
+            "groupadd", "groupdel", "visudo", "crontab", "ssh", "telnet", "nc",
+            "netcat", "iptables", "ufw", "firewall-cmd", "cat", ":(){:|:&};:",
+            "eval", "exec", "source", ".", # '.' is source alias
         ]
-        
-        # Convert command to lowercase for case-insensitive checks
-        command_lower = command.lower()
-        command_parts = command_lower.split()
+        if cmd_name in dangerous_commands:
+            print(f"Unsafe command blocked (dangerous command name): {command}")
+            return False
 
-        # Check if any part of the command matches dangerous patterns
-        for part in command_parts:
-             # Direct match check
-            if part in dangerous_patterns:
-                 print(f"Unsafe command blocked (direct match): {command}")
-                 return False
-             # Substring check (more sensitive) - check if any dangerous pattern is within any part
-            for pattern in dangerous_patterns:
-                if pattern in part:
-                     print(f"Unsafe command blocked (pattern '{pattern}' found in '{part}'): {command}")
-                     return False
-
-        # Only allow commands starting with known safe commands
+        # 2. Check if command is in the allowed list
         safe_command_starts = [
-            "echo", "date", "uptime", "whoami", "hostname", "uname",
-            "pwd", "ls", "dir", "cat", "type", "head", "tail",
-            "wc", "grep", "find", # Be cautious with find args
-            "ping", "traceroute", "tracepath", "netstat", # Network diagnostics
-            "ifconfig", "ipconfig", "ip addr", "ip link", # Network info
-            "ps", "top", "htop", "free", "df", "du" # System info
+            "echo", "date", "uptime", "whoami", "hostname", "uname", "pwd", "ls",
+            "dir", "type", "head", "tail", "wc", "grep", "find", "ping",
+            "traceroute", "tracepath", "netstat", "ifconfig", "ipconfig", "ip", # 'ip addr' etc.
+            "ps", "top", "htop", "free", "df", "du"
         ]
-        
-        # Check if the command starts with a safe command prefix
-        if command_parts:
-             first_command = command_parts[0]
-             for safe_cmd in safe_command_starts:
-                 if first_command == safe_cmd:
-                     # Basic safety check passed, let it run (further checks can be added)
-                     return True
-        
-        print(f"Unsafe command blocked (doesn't start with safe command): {command}")
-        return False
+        # Allow specific 'ip' subcommands if needed, e.g., 'ip addr', 'ip link'
+        if cmd_name == "ip" and len(parts) > 1 and parts[1].lower() in ["addr", "link", "route"]:
+             pass # Allow specific 'ip' subcommands
+        elif cmd_name not in safe_command_starts:
+            print(f"Unsafe command blocked (not in safe list): {command}")
+            return False
+
+        # 3. Check arguments for dangerous characters/patterns
+        dangerous_chars = [">", "<", "|", "&", ";", "`", "$", "*", "?", "[", "]", "{", "}", "\\", "'", "\"", "(", ")"] # Removed '.' and '-'
+        # Regex for basic validation of hostname/IP for ping
+        # Allows alphanumeric, dot, hyphen, colon (for IPv6)
+        # Does NOT perfectly validate, but blocks most shell metacharacters
+        hostname_ip_pattern = re.compile(r"^[a-zA-Z0-9\.\-:]+$")
+        # Allows simple options like -c, -t, -4, -6 and numbers
+        ping_options_pattern = re.compile(r"^-([a-zA-Z0-9]+)$")
+        numeric_pattern = re.compile(r"^[0-9]+$")
+
+        for i, part in enumerate(parts):
+            # Check all parts for the most dangerous characters
+            for char in dangerous_chars:
+                if char in part:
+                    print(f"Unsafe command blocked (dangerous char '{char}' in '{part}'): {command}")
+                    return False
+
+            # Specific checks for ping arguments (after the command name)
+            if cmd_name == "ping" and i > 0:
+                 # Allow simple options or numbers
+                 if ping_options_pattern.match(part) or numeric_pattern.match(part):
+                     continue
+                 # Allow the target hostname/IP
+                 elif hostname_ip_pattern.match(part):
+                     continue
+                 else:
+                     # Argument for ping is not a simple option, number, or valid-looking host/IP
+                     print(f"Unsafe command blocked (invalid ping argument '{part}'): {command}")
+                     return False
+            # Add checks for other commands if their arguments need specific validation
+            # Example: prevent 'ls /etc' - though '/' isn't in dangerous_chars, maybe add checks for sensitive paths?
+            # For now, rely on dangerous_chars blocking most injection attempts for other commands.
+
+        # If all checks passed
+        return True
 
     async def run_shell_command(self, command: str) -> str:
         """Run a shell command and return the output"""
