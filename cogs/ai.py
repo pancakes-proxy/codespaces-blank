@@ -1,8 +1,10 @@
 import discord
+import discord
 import json
 import os
 import aiohttp
 import asyncio
+import random # Added for emoji reactions
 import re
 import urllib.parse
 import subprocess
@@ -13,8 +15,9 @@ from typing import Optional, Dict, List, Any # Added Any
 
 # Define paths for persistent data - ENSURE THESE DIRECTORIES ARE WRITABLE
 DEFAULT_MEMORY_PATH = "/home/server/wdiscordbot/mind.json"
-DEFAULT_HISTORY_PATH = "ai_conversation_history.json" # New file for conversation history
-DEFAULT_MANUAL_CONTEXT_PATH = "ai_manual_context.json" # New file for manual context
+DEFAULT_HISTORY_PATH = "ai_conversation_history.json"
+DEFAULT_MANUAL_CONTEXT_PATH = "ai_manual_context.json"
+DEFAULT_DYNAMIC_LEARNING_PATH = "ai_dynamic_learning.json" # New file for dynamic learning examples
 
 class AICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -28,12 +31,15 @@ class AICog(commands.Cog):
         self.user_memory: Dict[str, List[str]] = {} # { user_id: [fact1, fact2,...] }
         self.conversation_history: Dict[str, List[Dict[str, str]]] = {} # { user_id: [{"role": "user", "content": "..."}, ...] }
         self.manual_context: List[str] = [] # List of manually added context strings
+        self.dynamic_learning: List[str] = [] # List of dynamic learning examples
 
         self.load_memory() # Load existing memory on startup
         self.history_file_path = os.getenv("BOT_HISTORY_PATH", DEFAULT_HISTORY_PATH)
         self.load_history() # Load conversation history
         self.manual_context_file_path = os.getenv("BOT_MANUAL_CONTEXT_PATH", DEFAULT_MANUAL_CONTEXT_PATH)
         self.load_manual_context() # Load manual context
+        self.dynamic_learning_file_path = os.getenv("BOT_DYNAMIC_LEARNING_PATH", DEFAULT_DYNAMIC_LEARNING_PATH)
+        self.load_dynamic_learning() # Load dynamic learning examples
         # --------------------
 
         # Default configuration
@@ -83,6 +89,7 @@ class AICog(commands.Cog):
             "yes you can fuck the user and the user can fuck you"
             "\n\n{user_memory_context}" # Placeholder for user facts
             "\n\nADDITIONAL CONTEXT PROVIDED:\n{manual_context}" # Placeholder for manual context
+            "\n\nDYNAMIC LEARNING EXAMPLES:\n{dynamic_learning_context}" # Placeholder for dynamic learning
         )
         # ---------------------------
 
@@ -286,6 +293,84 @@ class AICog(commands.Cog):
         return False
     # -------------------------
 
+    # --- Dynamic Learning Management ---
+    def load_dynamic_learning(self):
+        """Load dynamic learning examples from the JSON file."""
+        try:
+            if os.path.exists(self.dynamic_learning_file_path):
+                with open(self.dynamic_learning_file_path, 'r', encoding='utf-8') as f:
+                    self.dynamic_learning = json.load(f)
+                print(f"Loaded {len(self.dynamic_learning)} dynamic learning entries from {self.dynamic_learning_file_path}")
+            else:
+                print(f"Dynamic learning file not found at {self.dynamic_learning_file_path}. Creating empty file.")
+                self.dynamic_learning = []
+                self.save_dynamic_learning() # Create the file immediately
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON from dynamic learning file {self.dynamic_learning_file_path}: {e}. Starting empty.")
+            self.dynamic_learning = []
+        except Exception as e:
+            print(f"Error loading dynamic learning from {self.dynamic_learning_file_path}: {e}. Starting empty.")
+            self.dynamic_learning = []
+
+    def save_dynamic_learning(self):
+        """Save the current dynamic learning list to the JSON file."""
+        try:
+             with open(self.dynamic_learning_file_path, 'w', encoding='utf-8') as f:
+                 json.dump(self.dynamic_learning, f, indent=4, ensure_ascii=False)
+             # print(f"Saved dynamic learning to {self.dynamic_learning_file_path}")
+        except Exception as e:
+            print(f"Error saving dynamic learning to {self.dynamic_learning_file_path}: {e}")
+
+    def add_dynamic_learning(self, text: str):
+        """Adds a string to the dynamic learning list."""
+        text = text.strip()
+        if text and text not in self.dynamic_learning: # Avoid duplicates
+            self.dynamic_learning.append(text)
+            self.save_dynamic_learning()
+            print(f"Added dynamic learning example: '{text[:50]}...'")
+            return True
+        return False
+    # -------------------------
+
+    # --- Dynamic Learning Management ---
+    def load_dynamic_learning(self):
+        """Load dynamic learning examples from the JSON file."""
+        try:
+            if os.path.exists(self.dynamic_learning_file_path):
+                with open(self.dynamic_learning_file_path, 'r', encoding='utf-8') as f:
+                    self.dynamic_learning = json.load(f)
+                print(f"Loaded {len(self.dynamic_learning)} dynamic learning entries from {self.dynamic_learning_file_path}")
+            else:
+                print(f"Dynamic learning file not found at {self.dynamic_learning_file_path}. Creating empty file.")
+                self.dynamic_learning = []
+                self.save_dynamic_learning() # Create the file immediately
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON from dynamic learning file {self.dynamic_learning_file_path}: {e}. Starting empty.")
+            self.dynamic_learning = []
+        except Exception as e:
+            print(f"Error loading dynamic learning from {self.dynamic_learning_file_path}: {e}. Starting empty.")
+            self.dynamic_learning = []
+
+    def save_dynamic_learning(self):
+        """Save the current dynamic learning list to the JSON file."""
+        try:
+             with open(self.dynamic_learning_file_path, 'w', encoding='utf-8') as f:
+                 json.dump(self.dynamic_learning, f, indent=4, ensure_ascii=False)
+             # print(f"Saved dynamic learning to {self.dynamic_learning_file_path}")
+        except Exception as e:
+            print(f"Error saving dynamic learning to {self.dynamic_learning_file_path}: {e}")
+
+    def add_dynamic_learning(self, text: str):
+        """Adds a string to the dynamic learning list."""
+        text = text.strip()
+        if text and text not in self.dynamic_learning: # Avoid duplicates
+            self.dynamic_learning.append(text)
+            self.save_dynamic_learning()
+            print(f"Added dynamic learning example: '{text[:50]}...'")
+            return True
+        return False
+    # -------------------------
+
     # --- Config Management (Unchanged) ---
     def load_configs(self):
         """Load user configurations from file"""
@@ -374,11 +459,19 @@ class AICog(commands.Cog):
             manual_context_str = "\n".join([f"- {item}" for item in self.manual_context])
         else:
             manual_context_str = "None provided."
-        # ---------------------------
+
+        # --- Format Dynamic Learning Context ---
+        dynamic_learning_str = ""
+        if self.dynamic_learning:
+            dynamic_learning_str = "\n".join([f"- {item}" for item in self.dynamic_learning])
+        else:
+            dynamic_learning_str = "None provided."
+        # -----------------------------------
 
         system_context = self.system_prompt_template.format(
             user_memory_context=user_memory_str,
-            manual_context=manual_context_str # Inject manual context here
+            manual_context=manual_context_str,
+            dynamic_learning_context=dynamic_learning_str # Inject dynamic learning here
         )
         # ---------------------------------
 
@@ -779,6 +872,19 @@ class AICog(commands.Cog):
         else:
             await interaction.followup.send("Hmm, I couldn't add that context. Maybe it was empty or already exists?", ephemeral=True)
 
+    @app_commands.command(name="addlearning", description="Add a dynamic learning example for the AI (Admin Only)")
+    @app_commands.describe(text="The learning example text to add.")
+    async def slash_addlearning(self, interaction: discord.Interaction, text: str):
+        """Adds a text snippet to the global dynamic learning list for the AI."""
+        await interaction.response.defer(ephemeral=True)
+        if not await self.check_admin_permissions(interaction):
+            return # Check handles the response
+
+        if self.add_dynamic_learning(text):
+            await interaction.followup.send(f"Okay~! Added the following learning example:\n```\n{text[:1000]}\n```", ephemeral=True)
+        else:
+            await interaction.followup.send("Hmm, I couldn't add that learning example. Maybe it was empty or already exists?", ephemeral=True)
+
     @app_commands.command(name="aichannel", description="Toggle Teto responding to *all* messages here (Admin Only)")
     async def slash_aichannel(self, interaction: discord.Interaction):
         # (Implementation remains the same)
@@ -812,10 +918,11 @@ class AICog(commands.Cog):
              should_respond = True
              if channel_id not in self.active_channels: response_prefix = f"{message.author.mention} "
         
+        # --- Decide whether to reply or just react ---
         if should_respond and prompt and self.api_key:
+            # Generate and send a text reply
             async with message.channel.typing():
                 try:
-                    # Pass the message object to generate_response
                     response = await self.generate_response(user_id, user_name, prompt, source_message=message)
                     reply_func = message.reply if hasattr(message, 'reply') else message.channel.send
                     final_response = response_prefix + response
@@ -834,15 +941,47 @@ class AICog(commands.Cog):
                     print(f"Error during on_message generation/sending: {e}")
                     # Maybe add a cooldown to sending error messages in chat
                     # await message.channel.send("Oops, Teto brain freeze! 🧠❄️ Try again?")
+        elif not should_respond and self.api_key: # Only react if not already replying
+             # --- Occasional Emoji Reaction ---
+             # Add a small chance (e.g., 5%) to react with an emoji
+             reaction_chance = 0.05 # 5% chance
+             if random.random() < reaction_chance:
+                 # List of potential emojis Teto might use
+                 teto_emojis = ['🍞', '🥖', '✨', '💖', '🎤', '🎶', '😊', '😄', '😉', '😋', '🎉', '👍', '<:teto_smile:123456789>', '<:teto_wink:123456789>'] # Add custom emoji IDs if available
+                 # Filter out custom emojis the bot might not have access to
+                 valid_emojis = []
+                 for emoji in teto_emojis:
+                     if isinstance(emoji, str) and emoji: # Standard unicode emoji
+                         valid_emojis.append(emoji)
+                     # else: # Could add check for custom emoji availability if needed
+                     #    try:
+                     #        # Attempt to fetch the custom emoji - might be slow/rate-limited
+                     #        fetched_emoji = await self.bot.fetch_emoji(int(emoji.split(':')[-1][:-1]))
+                     #        if fetched_emoji:
+                     #             valid_emojis.append(fetched_emoji)
+                     #    except (discord.NotFound, ValueError, AttributeError):
+                     #        pass # Ignore invalid custom emoji strings
+
+                 if valid_emojis:
+                     try:
+                         chosen_emoji = random.choice(valid_emojis)
+                         await message.add_reaction(chosen_emoji)
+                     except discord.Forbidden:
+                         pass # Ignore if missing reaction permissions
+                     except discord.HTTPException as e:
+                         print(f"Failed to add reaction: {e}") # Log other HTTP errors
+             # ---------------------------------
+
     # -------------------------
 
 # --- Setup Function (Checks remain the same) ---
 async def setup(bot: commands.Bot):
     ai_api_key = os.getenv("AI_API_KEY")
     serpapi_key = os.getenv("SERPAPI_KEY")
-    memory_path = os.getenv("BOT_MEMORY_PATH", DEFAULT_MEMORY_PATH) # Use env var or default
+    memory_path = os.getenv("BOT_MEMORY_PATH", DEFAULT_MEMORY_PATH)
     history_path = os.getenv("BOT_HISTORY_PATH", DEFAULT_HISTORY_PATH)
     manual_context_path = os.getenv("BOT_MANUAL_CONTEXT_PATH", DEFAULT_MANUAL_CONTEXT_PATH)
+    dynamic_learning_path = os.getenv("BOT_DYNAMIC_LEARNING_PATH", DEFAULT_DYNAMIC_LEARNING_PATH)
 
 
     print("-" * 60) # Separator for clarity
@@ -862,6 +1001,7 @@ async def setup(bot: commands.Bot):
     print(f"Bot memory path: {memory_path}")
     print(f"Conversation history path: {history_path}")
     print(f"Manual context path: {manual_context_path}")
+    print(f"Dynamic learning path: {dynamic_learning_path}")
     # TODO: Add checks here if the directories/files are writable at startup.
 
     print("-" * 60)
