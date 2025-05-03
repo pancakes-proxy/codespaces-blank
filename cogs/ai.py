@@ -531,7 +531,7 @@ class AICog(commands.Cog):
 
     async def search_internet(self, query: str) -> str:
          # (Same implementation as previous version - uses SerpApi)
-        serp_api_key = os.getenv("SERPAPI_KEY") 
+        serp_api_key = os.getenv("SERP_API_KEY") 
         if not serp_api_key: return "Search is disabled (missing API key)."
         try:
             encoded_query = urllib.parse.quote(query)
