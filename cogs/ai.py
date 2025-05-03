@@ -28,8 +28,8 @@ class AICog(commands.Cog):
         # --------------------
 
         # Default configuration
-        self.default_config = {
-            "model": "google/gemini-pro-1.5-preview", # Changed to specified Google model on OpenRouter
+        self.default_config = { "google/gemini-2.0-flash-001"
+            "model": "
             "temperature": 0.75, # Slightly increased default temperature
             "max_tokens": 1500, # Increased default max tokens
             "top_p": 0.9,
