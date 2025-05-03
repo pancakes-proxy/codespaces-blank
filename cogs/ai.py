@@ -415,19 +415,12 @@ class AICog(commands.Cog):
         config = self.get_user_config(user_id)
         user_id_str = str(user_id) # Ensure user ID is string
 
-        # --- Regex for Commands and URLs ---
+        # --- Regex Command Handling (Timeout, Search - could be converted to tools later) ---
         timeout_match = re.search(r"timeout\s+<@!?(\d+)>(?:\s+for\s+(\d+)\s*(minute|minutes|min|mins|hour|hours|day|days))?", prompt, re.IGNORECASE)
         search_match = re.search(r"search(?:\s+for)?\s+(.+?)(?:\s+on\s+the\s+internet)?$", prompt, re.IGNORECASE)
-        image_url_match = re.search(r"(?P&url>https?://[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.bmp|\.webp))", prompt, re.IGNORECASE) # Added for image URLs
-
-        if image_url_match:
-            image_url = image_url_match.group("url")
-            print(f"Found image URL in message: {image_url}") # Log the found URL
-            response = await self.analyze_image(image_url)
-
-
-        elif timeout_match and guild_id and channel_id:
-            # --- Timeout Logic (Unchanged) ---
+        
+        if timeout_match and guild_id and channel_id:
+            # (Timeout logic remains the same as previous version)
             target_id = timeout_match.group(1)
             duration_str = timeout_match.group(2) or "5"
             unit = (timeout_match.group(3) or "minutes").lower()
@@ -761,42 +754,7 @@ class AICog(commands.Cog):
         except Exception as e:
             return f"Error running command: {str(e)}"
 
-    async def analyze_image(self, image_url: str) -> str:
-        """Analyzes an image from a URL using OpenCV."""
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(image_url) as resp:
-                    if resp.status != 200:
-                        return f"Could not download image (HTTP status: {resp.status})."
-                    image_bytes = await resp.read()
-
-            # Convert bytes to numpy array for OpenCV
-            import cv2
-            import numpy as np
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-            if img is None:  # Check if image decoding failed
-                return "Could not decode image."
-
-
-            # Basic check for text (might need improvement)
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
-            text_contours = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
-            has_text = any(cv2.contourArea(c) > 1000 for c in text_contours) # Adjust threshold as needed
-
-            if has_text:
-                return "The image appears to contain text."
-            else:
-                # Placeholder for image classification (add your preferred model/method here)
-                return "The image does not appear to contain text. (Image classification not yet implemented)"
-
-        except Exception as e:
-            return f"Error analyzing image: {str(e)}"
-
-
-    # --- Other Methods (timeout_user, search_internet, check_admin_permissions, analyze_image - Unchanged) ---
+    # --- Other Methods (timeout_user, search_internet, check_admin_permissions - Unchanged) ---
     async def timeout_user(self, guild_id: int, user_id: int, minutes: int) -> bool:
         # (Same implementation as previous version)
         try:
