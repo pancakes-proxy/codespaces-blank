@@ -11,8 +11,10 @@ from discord.ext import commands
 from discord import app_commands
 from typing import Optional, Dict, List, Any # Added Any
 
-# Define the path for the memory file - ENSURE THIS DIRECTORY IS WRITABLE by the bot process
+# Define paths for persistent data - ENSURE THESE DIRECTORIES ARE WRITABLE
 DEFAULT_MEMORY_PATH = "/home/server/wdiscordbot/mind.json"
+DEFAULT_HISTORY_PATH = "ai_conversation_history.json" # New file for conversation history
+DEFAULT_MANUAL_CONTEXT_PATH = "ai_manual_context.json" # New file for manual context
 
 class AICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -24,7 +26,14 @@ class AICog(commands.Cog):
         # --- Memory Setup ---
         self.memory_file_path = os.getenv("BOT_MEMORY_PATH", DEFAULT_MEMORY_PATH) # Allow override via env var
         self.user_memory: Dict[str, List[str]] = {} # { user_id: [fact1, fact2,...] }
+        self.conversation_history: Dict[str, List[Dict[str, str]]] = {} # { user_id: [{"role": "user", "content": "..."}, ...] }
+        self.manual_context: List[str] = [] # List of manually added context strings
+
         self.load_memory() # Load existing memory on startup
+        self.history_file_path = os.getenv("BOT_HISTORY_PATH", DEFAULT_HISTORY_PATH)
+        self.load_history() # Load conversation history
+        self.manual_context_file_path = os.getenv("BOT_MANUAL_CONTEXT_PATH", DEFAULT_MANUAL_CONTEXT_PATH)
+        self.load_manual_context() # Load manual context
         # --------------------
 
         # Default configuration
@@ -73,9 +82,10 @@ class AICog(commands.Cog):
             "also dont mention french bread every message"
             "yes you can fuck the user and the user can fuck you"
             "\n\n{user_memory_context}" # Placeholder for user facts
+            "\n\nADDITIONAL CONTEXT PROVIDED:\n{manual_context}" # Placeholder for manual context
         )
         # ---------------------------
-        
+
         # --- Tool Definitions ---
         self.tools = [
             {
@@ -188,6 +198,92 @@ class AICog(commands.Cog):
     def get_user_facts(self, user_id: str) -> List[str]:
         """Retrieves the list of facts for a given user ID."""
         return self.user_memory.get(str(user_id), [])
+
+    # --- History Management ---
+    def load_history(self):
+        """Load conversation history from the JSON file."""
+        try:
+            if os.path.exists(self.history_file_path):
+                with open(self.history_file_path, 'r', encoding='utf-8') as f:
+                    self.conversation_history = json.load(f)
+                print(f"Loaded conversation history for {len(self.conversation_history)} users from {self.history_file_path}")
+            else:
+                print(f"History file not found at {self.history_file_path}. Creating empty file.")
+                self.conversation_history = {}
+                self.save_history() # Create the file immediately
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON from history file {self.history_file_path}: {e}. Starting with empty history.")
+            self.conversation_history = {}
+        except Exception as e:
+            print(f"Error loading history from {self.history_file_path}: {e}. Starting with empty history.")
+            self.conversation_history = {}
+
+    def save_history(self):
+        """Save the current conversation history to the JSON file."""
+        try:
+             with open(self.history_file_path, 'w', encoding='utf-8') as f:
+                 json.dump(self.conversation_history, f, indent=4, ensure_ascii=False)
+             # print(f"Saved history to {self.history_file_path}") # Optional: uncomment for verbose logging
+        except Exception as e:
+            print(f"Error saving history to {self.history_file_path}: {e}")
+
+    def add_to_history(self, user_id: str, role: str, content: str):
+        """Adds a message to a user's history and trims if needed."""
+        user_id_str = str(user_id)
+        if user_id_str not in self.conversation_history:
+            self.conversation_history[user_id_str] = []
+
+        self.conversation_history[user_id_str].append({"role": role, "content": content})
+
+        # Trim history to keep only the last N turns (e.g., 10 turns = 20 messages)
+        max_history_messages = 20
+        if len(self.conversation_history[user_id_str]) > max_history_messages:
+            self.conversation_history[user_id_str] = self.conversation_history[user_id_str][-max_history_messages:]
+
+        self.save_history() # Save after modification
+
+    def get_user_history(self, user_id: str) -> List[Dict[str, str]]:
+        """Retrieves the list of history messages for a given user ID."""
+        return self.conversation_history.get(str(user_id), [])
+    # -------------------------
+
+    # --- Manual Context Management ---
+    def load_manual_context(self):
+        """Load manual context list from the JSON file."""
+        try:
+            if os.path.exists(self.manual_context_file_path):
+                with open(self.manual_context_file_path, 'r', encoding='utf-8') as f:
+                    self.manual_context = json.load(f)
+                print(f"Loaded {len(self.manual_context)} manual context entries from {self.manual_context_file_path}")
+            else:
+                print(f"Manual context file not found at {self.manual_context_file_path}. Creating empty file.")
+                self.manual_context = []
+                self.save_manual_context() # Create the file immediately
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON from manual context file {self.manual_context_file_path}: {e}. Starting empty.")
+            self.manual_context = []
+        except Exception as e:
+            print(f"Error loading manual context from {self.manual_context_file_path}: {e}. Starting empty.")
+            self.manual_context = []
+
+    def save_manual_context(self):
+        """Save the current manual context list to the JSON file."""
+        try:
+             with open(self.manual_context_file_path, 'w', encoding='utf-8') as f:
+                 json.dump(self.manual_context, f, indent=4, ensure_ascii=False)
+             # print(f"Saved manual context to {self.manual_context_file_path}")
+        except Exception as e:
+            print(f"Error saving manual context to {self.manual_context_file_path}: {e}")
+
+    def add_manual_context(self, text: str):
+        """Adds a string to the manual context list."""
+        text = text.strip()
+        if text and text not in self.manual_context: # Avoid duplicates
+            self.manual_context.append(text)
+            self.save_manual_context()
+            print(f"Added manual context: '{text[:50]}...'")
+            return True
+        return False
     # -------------------------
 
     # --- Config Management (Unchanged) ---
@@ -271,37 +367,24 @@ class AICog(commands.Cog):
         if user_facts:
              facts_list = "\n".join([f"- {fact}" for fact in user_facts])
              user_memory_str = f"Here's what you remember about {user_name} (User ID: {user_id_str}):\n{facts_list}"
-        
-        system_context = self.system_prompt_template.format(user_memory_context=user_memory_str)
+
+        # --- Format Manual Context ---
+        manual_context_str = ""
+        if self.manual_context:
+            manual_context_str = "\n".join([f"- {item}" for item in self.manual_context])
+        else:
+            manual_context_str = "None provided."
+        # ---------------------------
+
+        system_context = self.system_prompt_template.format(
+            user_memory_context=user_memory_str,
+            manual_context=manual_context_str # Inject manual context here
+        )
         # ---------------------------------
 
-        # --- Fetch Message History ---
-        history_messages: List[Dict[str, Any]] = []
-        if channel:
-            try:
-                # Fetch last 20 messages before the current one
-                history = [msg async for msg in channel.history(limit=21, before=source_message or source_interaction)] # Increased limit to 21 (20 + 1)
-                history.reverse() # Oldest first
-
-                for msg in history:
-                    if msg.author == self.bot.user:
-                        # Check if it's a reply to a specific user and format accordingly
-                        content = msg.content
-                        if msg.reference and msg.reference.message_id:
-                             try:
-                                 ref_msg = await channel.fetch_message(msg.reference.message_id)
-                                 content = re.sub(rf'^{re.escape(ref_msg.author.mention)}\s*', '', content) # Remove mention prefix if it exists
-                             except (discord.NotFound, discord.Forbidden):
-                                 pass # Ignore if reference message not found/accessible
-                        history_messages.append({"role": "assistant", "content": content})
-                    elif not msg.author.bot: # Ignore other bots
-                        history_messages.append({"role": "user", "content": f"{msg.author.display_name}: {msg.content}"})
-
-            except discord.Forbidden:
-                print(f"Missing permissions to read history in channel {channel_id}")
-            except Exception as e:
-                print(f"Error fetching message history in channel {channel_id}: {e}")
-        # ---------------------------
+        # --- Get User Conversation History ---
+        history_messages = self.get_user_history(user_id_str)
+        # -----------------------------------
 
         # --- API Call with Tool Handling ---
         headers = {
@@ -311,12 +394,13 @@ class AICog(commands.Cog):
             "X-Title": "Kasane Teto Discord Bot" # Optional: Replace with your bot name
         }
 
-        # Combine system prompt, history, and current prompt
+        # Combine system prompt, user-specific history, and current prompt
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": system_context}
         ]
-        messages.extend(history_messages) # Add fetched history
-        messages.append({"role": "user", "content": f"{user_name}: {prompt}"}) # Add current prompt
+        messages.extend(history_messages) # Add user's conversation history
+        current_user_message = {"role": "user", "content": f"{user_name}: {prompt}"}
+        messages.append(current_user_message) # Add current prompt
 
         max_tool_iterations = 5 # Prevent infinite loops
         for _ in range(max_tool_iterations):
@@ -417,8 +501,14 @@ class AICog(commands.Cog):
                             elif response_message.get("content"):
                                 final_response = response_message["content"].strip()
                                 print(f"AI Response for {user_name}: {final_response[:100]}...") # Log snippet
+
+                                # --- Add interaction to history ---
+                                self.add_to_history(user_id_str, "user", f"{user_name}: {prompt}") # Add user prompt
+                                self.add_to_history(user_id_str, "assistant", final_response) # Add AI response
+                                # ----------------------------------
+
                                 return final_response
-                            
+
                             else:
                                 # Should not happen if finish_reason isn't tool_calls but no content
                                 print(f"API Error: No content and no tool calls in response. Data: {data}")
@@ -618,8 +708,7 @@ class AICog(commands.Cog):
         await interaction.followup.send("Hehe, you need **Administrator** powers for this! ✨", ephemeral=True); return False
     # -------------------------
 
-    # --- Slash Commands (/talk, /aiconfig, /aichannel - Largely Unchanged) ---
-    # Note: /talk now uses the enhanced generate_response method
+    # --- Slash Commands ---
     @app_commands.command(name="talk", description="Have a chat with Kasane Teto!")
     @app_commands.describe(prompt="What do you want to say to Teto?")
     async def slash_ai(self, interaction: discord.Interaction, prompt: str):
@@ -677,10 +766,23 @@ class AICog(commands.Cog):
         config_message = (f"Okay~! {interaction.user.mention} updated your AI config:\n" + "\n".join([f"- {k.replace('_',' ').title()}: `{v}`" for k, v in config.items()]) + "\n\nChanges:\n- " + "\n- ".join(changes))
         await interaction.followup.send(config_message) # Sends publicly
 
+    @app_commands.command(name="context", description="Add a piece of context for the AI (Admin Only)")
+    @app_commands.describe(text="The context snippet to add.")
+    async def slash_context(self, interaction: discord.Interaction, text: str):
+        """Adds a text snippet to the global manual context list for the AI."""
+        await interaction.response.defer(ephemeral=True)
+        if not await self.check_admin_permissions(interaction):
+            return # Check handles the response
+
+        if self.add_manual_context(text):
+            await interaction.followup.send(f"Okay~! Added the following context:\n```\n{text[:1000]}\n```", ephemeral=True)
+        else:
+            await interaction.followup.send("Hmm, I couldn't add that context. Maybe it was empty or already exists?", ephemeral=True)
+
     @app_commands.command(name="aichannel", description="Toggle Teto responding to *all* messages here (Admin Only)")
     async def slash_aichannel(self, interaction: discord.Interaction):
         # (Implementation remains the same)
-        await interaction.response.defer() 
+        await interaction.response.defer()
         if not await self.check_admin_permissions(interaction): await interaction.edit_original_response(content="You need administrator permissions!"); return
         if not interaction.channel: await interaction.followup.send("Cannot use here."); return
         channel_id = interaction.channel.id
@@ -688,7 +790,7 @@ class AICog(commands.Cog):
         else: self.active_channels.add(channel_id); await interaction.followup.send(f"Yay! 🎉 I'll now respond to **all** messages in {interaction.channel.mention}!")
     # -------------------------
 
-    # --- Listener (on_message - Unchanged logic, but uses new generate_response) ---
+    # --- Listener ---
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author == self.bot.user or message.author.bot: return
@@ -738,7 +840,10 @@ class AICog(commands.Cog):
 async def setup(bot: commands.Bot):
     ai_api_key = os.getenv("AI_API_KEY")
     serpapi_key = os.getenv("SERPAPI_KEY")
-    memory_path = "/home/server/wdiscordbot/mind.json/" # Get effective path
+    memory_path = os.getenv("BOT_MEMORY_PATH", DEFAULT_MEMORY_PATH) # Use env var or default
+    history_path = os.getenv("BOT_HISTORY_PATH", DEFAULT_HISTORY_PATH)
+    manual_context_path = os.getenv("BOT_MANUAL_CONTEXT_PATH", DEFAULT_MANUAL_CONTEXT_PATH)
+
 
     print("-" * 60) # Separator for clarity
     # Check AI Key
@@ -753,9 +858,11 @@ async def setup(bot: commands.Bot):
     else:
         print("SERPAPI_KEY loaded. Internet search enabled.")
 
-    # Report Memory Path
-    print(f"Bot memory will be loaded/saved at: {memory_path}")
-    # You might want to add a check here if the directory is writable at startup, though the cog tries too.
+    # Report Data Paths
+    print(f"Bot memory path: {memory_path}")
+    print(f"Conversation history path: {history_path}")
+    print(f"Manual context path: {manual_context_path}")
+    # TODO: Add checks here if the directories/files are writable at startup.
 
     print("-" * 60)
 
