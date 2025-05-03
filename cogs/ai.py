@@ -17,9 +17,9 @@ DEFAULT_MEMORY_PATH = "/home/server/wdiscordbot/mind.json"
 class AICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.api_key = os.getenv("AI_API_KEY")
-        self.api_url = "https://api.together.xyz/v1/chat/completions"
-        self.security_code = os.getenv("SERVICE_CODE") 
+        self.api_key = os.getenv("AI_API_KEY") # Ensure this holds your OpenRouter API key
+        self.api_url = "https://openrouter.ai/api/v1/chat/completions" # Changed to OpenRouter endpoint
+        self.security_code = os.getenv("SERVICE_CODE")
 
         # --- Memory Setup ---
         self.memory_file_path = os.getenv("BOT_MEMORY_PATH", DEFAULT_MEMORY_PATH) # Allow override via env var
@@ -29,7 +29,7 @@ class AICog(commands.Cog):
 
         # Default configuration
         self.default_config = {
-            "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", # Or your preferred model
+            "model": "google/gemini-pro-1.5-preview", # Changed to specified Google model on OpenRouter
             "temperature": 0.75, # Slightly increased default temperature
             "max_tokens": 1500, # Increased default max tokens
             "top_p": 0.9,
@@ -707,9 +707,9 @@ async def setup(bot: commands.Bot):
     print("-" * 60) # Separator for clarity
     # Check AI Key
     if not ai_api_key:
-        print("!!! WARNING: AI_API_KEY not set. AI features WILL NOT WORK. !!!")
+        print("!!! WARNING: AI_API_KEY not set. AI features WILL NOT WORK. Ensure it contains your OpenRouter key. !!!")
     else:
-        print(f"AI_API_KEY loaded (ends with ...{ai_api_key[-4:]}). Using Together AI.")
+        print(f"AI_API_KEY loaded (ends with ...{ai_api_key[-4:]}). Using OpenRouter API.") # Updated print statement
 
     # Check Search Key
     if not serpapi_key:
