@@ -11,7 +11,7 @@ import asyncio
 load_dotenv("/home/server/keys.env")
 
 GENIUS_API_KEY = os.getenv("GENIUS_API_KEY")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_API_KEY = os.getenv("AI1_API_KEY")
 
 if not GENIUS_API_KEY:
     raise ValueError("GENIUS_API_KEY is not set in the environment variables.")
