@@ -222,11 +222,15 @@ class AICog(commands.Cog):
         return self.user_configs.get(str(user_id), self.default_config).copy()
     # -------------------------
 
-    async def generate_response(self, user_id: str, user_name: str, prompt: str, guild_id: Optional[int] = None, channel_id: Optional[int] = None) -> str:
-        """Generate a response using the Together AI API, handling tools and memory."""
+    async def generate_response(self, user_id: str, user_name: str, prompt: str, source_message: Optional[discord.Message] = None, source_interaction: Optional[discord.Interaction] = None) -> str:
+        """Generate a response using the OpenRouter API, handling tools, memory, and message history."""
         if not self.api_key:
              return "Sorry, the AI API key is not configured. I cannot generate a response."
-             
+
+        guild_id = source_message.guild.id if source_message and source_message.guild else (source_interaction.guild.id if source_interaction and source_interaction.guild else None)
+        channel_id = source_message.channel.id if source_message else (source_interaction.channel.id if source_interaction and source_interaction.channel else None)
+        channel = source_message.channel if source_message else (source_interaction.channel if source_interaction and source_interaction.channel else None)
+
         config = self.get_user_config(user_id)
         user_id_str = str(user_id) # Ensure user ID is string
 
@@ -271,18 +275,48 @@ class AICog(commands.Cog):
         system_context = self.system_prompt_template.format(user_memory_context=user_memory_str)
         # ---------------------------------
 
+        # --- Fetch Message History ---
+        history_messages: List[Dict[str, Any]] = []
+        if channel:
+            try:
+                # Fetch last 20 messages before the current one
+                history = [msg async for msg in channel.history(limit=21, before=source_message or source_interaction)] # Increased limit to 21 (20 + 1)
+                history.reverse() # Oldest first
+
+                for msg in history:
+                    if msg.author == self.bot.user:
+                        # Check if it's a reply to a specific user and format accordingly
+                        content = msg.content
+                        if msg.reference and msg.reference.message_id:
+                             try:
+                                 ref_msg = await channel.fetch_message(msg.reference.message_id)
+                                 content = re.sub(rf'^{re.escape(ref_msg.author.mention)}\s*', '', content) # Remove mention prefix if it exists
+                             except (discord.NotFound, discord.Forbidden):
+                                 pass # Ignore if reference message not found/accessible
+                        history_messages.append({"role": "assistant", "content": content})
+                    elif not msg.author.bot: # Ignore other bots
+                        history_messages.append({"role": "user", "content": f"{msg.author.display_name}: {msg.content}"})
+
+            except discord.Forbidden:
+                print(f"Missing permissions to read history in channel {channel_id}")
+            except Exception as e:
+                print(f"Error fetching message history in channel {channel_id}: {e}")
+        # ---------------------------
+
         # --- API Call with Tool Handling ---
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/your-repo", # Optional: Replace with your project URL
+            "X-Title": "Kasane Teto Discord Bot" # Optional: Replace with your bot name
         }
-        
-        # Initial message history
-        # TODO: Add conversation history persistence if desired
+
+        # Combine system prompt, history, and current prompt
         messages: List[Dict[str, Any]] = [
-            {"role": "system", "content": system_context},
-            {"role": "user", "content": f"{user_name}: {prompt}"} 
+            {"role": "system", "content": system_context}
         ]
+        messages.extend(history_messages) # Add fetched history
+        messages.append({"role": "user", "content": f"{user_name}: {prompt}"}) # Add current prompt
 
         max_tool_iterations = 5 # Prevent infinite loops
         for _ in range(max_tool_iterations):
@@ -589,16 +623,15 @@ class AICog(commands.Cog):
     @app_commands.command(name="talk", description="Have a chat with Kasane Teto!")
     @app_commands.describe(prompt="What do you want to say to Teto?")
     async def slash_ai(self, interaction: discord.Interaction, prompt: str):
-        await interaction.response.defer() 
+        await interaction.response.defer()
         user_id = str(interaction.user.id)
         user_name = interaction.user.display_name
-        guild_id = interaction.guild.id if interaction.guild else None
-        channel_id = interaction.channel.id if interaction.channel else None
+        # Pass the interaction object to generate_response
         try:
-            response = await self.generate_response(user_id, user_name, prompt, guild_id, channel_id)
+            response = await self.generate_response(user_id, user_name, prompt, source_interaction=interaction)
             # Split long messages
             if len(response) > 2000:
-                 for chunk in [response[i:i+1990] for i in range(0, len(response), 1990)]: 
+                 for chunk in [response[i:i+1990] for i in range(0, len(response), 1990)]:
                       await interaction.followup.send(chunk, suppress_embeds=True) # Suppress embeds for chunks
             else:
                  await interaction.followup.send(response, suppress_embeds=True)
@@ -664,9 +697,8 @@ class AICog(commands.Cog):
 
         user_id = str(message.author.id)
         user_name = message.author.display_name
-        guild_id = message.guild.id if message.guild else None
-        channel_id = message.channel.id if message.channel else None
-        
+        channel_id = message.channel.id if message.channel else None # Keep channel_id check for active_channels
+
         should_respond = False; prompt = message.content; response_prefix = ""
         mention_pattern = f'<@!?{self.bot.user.id}>'
         
@@ -681,10 +713,11 @@ class AICog(commands.Cog):
         if should_respond and prompt and self.api_key:
             async with message.channel.typing():
                 try:
-                    response = await self.generate_response(user_id, user_name, prompt, guild_id, channel_id)
+                    # Pass the message object to generate_response
+                    response = await self.generate_response(user_id, user_name, prompt, source_message=message)
                     reply_func = message.reply if hasattr(message, 'reply') else message.channel.send
                     final_response = response_prefix + response
-                    
+
                     # Split long messages
                     if len(final_response) > 2000:
                          first_chunk = True
