@@ -916,7 +916,7 @@ class AICog(commands.Cog):
     # --- Listener ---
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if message.author == self.bot.user or message.author.bot: return
+        if message.author == self.bot.user: return # Allow bot responses
         ctx = await self.bot.get_context(message); 
         if ctx.valid: return # Let command processing handle valid commands
 
