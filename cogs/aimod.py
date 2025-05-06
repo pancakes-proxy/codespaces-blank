@@ -18,7 +18,7 @@ OPENROUTER_MODEL = "openai/gpt-4.1-nano" # Make sure this model is available via
 
 # Discord Configuration
 MODERATOR_ROLE_ID = 1361031007536549979 # Role to ping for violations
-BOT_COMMANDS_CHANNEL_ID = 1360717341775630637 # <#1360717341775630637>
+BOT_COMMANDS_CHANNEL_ID = [1360717341775630637, 1361038501902291135] # <#1360717341775630637>
 SUGGESTIONS_CHANNEL_ID = 1361752490210492489 # <#1361752490210492489>
 # Add the IDs of your designated NSFW channels here for Rule 1 check
 NSFW_CHANNEL_IDS = [1360708304187297844, 1360842650617647164, 1360842660213952713, 1360842670473216030, 1361081722426364006, 1360859057644245063, 1361892988539896029, 1365524778735239268, 1361097898799927437, 1361097565591961640, 1360842695806812180, 1361097983097049210] # Example: [123456789012345678, 987654321098765432]
@@ -114,6 +114,7 @@ Instructions:
     - "reasoning": string (A concise explanation for your decision, referencing the specific rule and content).
     - "action": string (Suggest ONE action based on the violation severity: "IGNORE", "WARN", "DELETE", "BAN", "NOTIFY_MODS". Mandatory "BAN" for rule 5A or 5. "DELETE" for rule 4 or rule 1 in wrong channel. "WARN" or "DELETE" for 2, 3. "NOTIFY_MODS" if unsure but suspicious).
 
+"this is a note some messages are getting flagged for no reason please note that if there is a NSFW image with a character in it that has red hair that is 31 year old kasane teto so stop fucking flagging it you pmo
 Example Response (Violation):
 {{
   "violation": true,
