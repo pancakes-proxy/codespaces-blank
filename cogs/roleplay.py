@@ -25,7 +25,7 @@ class CustomCommandsCog(commands.Cog):
     async def wave(self, interaction: discord.Interaction, member: discord.Member):
         await interaction.response.send_message(f"{interaction.user.mention} waved at {member.mention}")
 
-    @app_commands.command(name="swisschesse", description="A demonstration command.")
+    @app_commands.command(name="swisschesse", description="smtg")
     async def swisschesse(self, interaction: discord.Interaction, member: discord.Member):
         await interaction.response.send_message(
             f"{interaction.user.mention} has sent {member.mention} to King Von with that glock 19 and 30 round clip"
@@ -61,7 +61,7 @@ class CustomCommandsCog(commands.Cog):
     @app_commands.command(name="caughtlacking", description="Catches someone lacking.")
     async def caughtlacking(self, interaction: discord.Interaction, member: discord.Member):
         await interaction.response.send_message(
-            f"{interaction.user.mention} and his crew caught {member.mention} lacking and sprayed them with the glock 19, reminiscent of Pop Smoke."
+            f"{interaction.user.mention} and his crew caught {member.mention} lacking and sprayed them with the glock 19, smoked like Pop Smoke."
         )
 
     @app_commands.command(name="slap", description="Slap a user.")
