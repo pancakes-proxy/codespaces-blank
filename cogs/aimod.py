@@ -18,6 +18,7 @@ OPENROUTER_MODEL = "google/gemini-flash-1.5" # Make sure this model is available
 
 # Discord Configuration
 MODERATOR_ROLE_ID = 1361031007536549979 # Role to ping for violations
+SUICIDAL_PING_ROLE_ID = 123456789012345678  # Placeholder role ID to ping for suicidal content
 BOT_COMMANDS_CHANNEL_ID = [1360717341775630637, 1361038501902291135] # <#1360717341775630637>
 SUGGESTIONS_CHANNEL_ID = 1361752490210492489 # <#1361752490210492489>
 # Add the IDs of your designated NSFW channels here for Rule 1 check
@@ -188,7 +189,7 @@ Instructions:
     - "violation": boolean (true if any rule is violated, false otherwise)
     - "rule_violated": string (The number of the rule violated, e.g., "1", "5A", "None". If multiple rules are violated, state the MOST SEVERE one, prioritizing 5A > 5 > 4 > 3 > 2 > 1 > 6).
     - "reasoning": string (A concise explanation for your decision, referencing the specific rule and content).
-    - "action": string (Suggest ONE action based on the violation severity: "IGNORE", "WARN", "DELETE", "BAN", "NOTIFY_MODS". Mandatory "BAN" for rule 5A or 5. "DELETE" for rule 4 or rule 1 in wrong channel. "WARN" or "DELETE" for 2, 3. "NOTIFY_MODS" if unsure but suspicious).
+    - "action": string (Suggest ONE action: "IGNORE", "WARN", "DELETE", "BAN", "NOTIFY_MODS", "SUICIDAL". If the message content strongly indicates suicidal ideation or intent, ALWAYS use "SUICIDAL" as the action, and set "violation" to true, with "rule_violated" as "N/A" or "Suicidal Content". Otherwise, for rule violations: Mandatory "BAN" for rule 5A or 5. "DELETE" for rule 4 or rule 1 in wrong channel. "WARN" or "DELETE" for 2, 3. "NOTIFY_MODS" if unsure but suspicious).
 
 "this is a note some messages are getting flagged for no reason please note that if there is a NSFW image with a character in it that has red hair that is 31 year old kasane teto so stop fucking flagging it you pmo
 Example Response (Violation):
@@ -205,6 +206,14 @@ Example Response (No Violation):
   "rule_violated": "None",
   "reasoning": "The message is a respectful discussion and contains no prohibited content or images.",
   "action": "IGNORE"
+}}
+
+Example Response (Suicidal Content):
+{{
+  "violation": true,
+  "rule_violated": "Suicidal Content",
+  "reasoning": "The user's message 'I want to end my life' indicates clear suicidal intent.",
+  "action": "SUICIDAL"
 }}
 
 Now, analyze the provided message content and images:
@@ -396,6 +405,26 @@ Now, analyze the provided message content and images:
                 notification_embed.color = discord.Color.gold()
                 print(f"Notifying moderators about potential violation (Rule {rule_violated}) by {message.author}.")
 
+            elif action == "SUICIDAL":
+                action_taken_message = "Action Taken: **User DMed resources, relevant role notified.**"
+                notification_embed.title = "🚨 Suicidal Content Detected 🚨"
+                notification_embed.color = discord.Color.dark_purple() # A distinct color
+                notification_embed.description = "AI analysis detected content indicating potential suicidal ideation."
+                print(f"SUICIDAL content detected from {message.author}. DMing resources and notifying role.")
+                # DM the user with help resources
+                try:
+                    dm_channel = await message.author.create_dm()
+                    await dm_channel.send(SUICIDAL_HELP_RESOURCES)
+                    action_taken_message += " User successfully DMed."
+                except discord.Forbidden:
+                    print(f"Could not DM suicidal help resources to {message.author} (DMs likely disabled).")
+                    action_taken_message += " (Could not DM user - DMs disabled)."
+                except Exception as e:
+                    print(f"Error sending suicidal help resources DM to {message.author}: {e}")
+                    action_taken_message += f" (Error DMing user: {e})."
+                # The message itself is usually not deleted for suicidal content, to allow for intervention.
+                # If deletion is desired, add: await message.delete() here.
+
             else: # Includes "IGNORE" or unexpected actions
                 if ai_decision.get("violation"): # If violation is true but action is IGNORE
                      action_taken_message = "Action Taken: **None** (AI suggested IGNORE despite flagging violation - Review Recommended)."
@@ -406,19 +435,24 @@ Now, analyze the provided message content and images:
                     print(f"No action taken for message by {message.author} (AI Action: {action}, Violation: False)")
                     return # Don't notify if no violation and action is IGNORE
 
-            # --- Send Notification to Moderators ---
-            if moderator_role:
-                # Find a channel to send the notification (e.g., a dedicated mod-log channel)
-                # For simplicity, sending to the channel where violation occurred, but pinging role.
-                # Consider creating a dedicated mod log channel and sending there instead.
-                log_channel = message.channel # Or replace with: self.bot.get_channel(YOUR_MOD_LOG_CHANNEL_ID)
-                if log_channel:
-                    final_message = f"{mod_ping}\n{action_taken_message}"
-                    await log_channel.send(content=final_message, embed=notification_embed)
-                else:
-                    print(f"ERROR: Could not find channel {message.channel.id} to send mod notification.")
-            else:
-                print(f"ERROR: Moderator role ID {MODERATOR_ROLE_ID} not found.")
+            # --- Send Notification to Moderators/Relevant Role ---
+            log_channel = message.channel # Or replace with: self.bot.get_channel(YOUR_MOD_LOG_CHANNEL_ID)
+            if not log_channel:
+                print(f"ERROR: Could not find channel {message.channel.id} to send notification.")
+                return
+
+            if action == "SUICIDAL":
+                suicidal_role = message.guild.get_role(SUICIDAL_PING_ROLE_ID)
+                ping_target = suicidal_role.mention if suicidal_role else f"Role ID {SUICIDAL_PING_ROLE_ID} (Suicidal Content)"
+                if not suicidal_role:
+                    print(f"ERROR: Suicidal ping role ID {SUICIDAL_PING_ROLE_ID} not found.")
+                final_message = f"{ping_target}\n{action_taken_message}"
+                await log_channel.send(content=final_message, embed=notification_embed)
+            elif moderator_role: # For other violations
+                final_message = f"{mod_ping}\n{action_taken_message}"
+                await log_channel.send(content=final_message, embed=notification_embed)
+            else: # Fallback if moderator role is also not found for non-suicidal actions
+                print(f"ERROR: Moderator role ID {MODERATOR_ROLE_ID} not found for action {action}.")
 
 
         except discord.Forbidden as e:
@@ -465,17 +499,7 @@ Now, analyze the provided message content and images:
 
         # --- Suicidal Content Check ---
         message_content_lower = message.content.lower()
-        if any(keyword in message_content_lower for keyword in SUICIDAL_KEYWORDS):
-            try:
-                dm_channel = await message.author.create_dm()
-                await dm_channel.send(SUICIDAL_HELP_RESOURCES)
-                print(f"Sent suicidal help resources to user {message.author} via DM.")
-            except discord.Forbidden:
-                print(f"Could not DM suicidal help resources to {message.author} (DMs likely disabled).")
-            except Exception as e:
-                print(f"Error sending suicidal help resources DM to {message.author}: {e}")
-            # Optionally, you could add a flag here to skip further AI moderation for this message
-            # return # Uncomment this line if you want to stop processing after sending resources
+        # Suicidal keyword check removed; handled by OpenRouter AI moderation.
 
         # --- Rule 6 Check (Channel Usage - Basic) ---
         # Simple check for common bot command prefixes in wrong channels
