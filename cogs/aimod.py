@@ -1,34 +1,48 @@
 # moderation_cog.py
 import discord
 from discord.ext import commands
+from discord import app_commands
 import aiohttp # For making asynchronous HTTP requests
 import json
 import os # To load API key from environment variables
 
 # --- Configuration ---
 # Load the OpenRouter API key from the environment variable "AI_API_KEY"
-# Fallback to a placeholder if the environment variable is not set.
 OPENROUTER_API_KEY = os.getenv("AI_API_KEY")
-# Error if no API key
 if not OPENROUTER_API_KEY:
     raise ValueError("Error: AI_API_KEY environment variable is not set. The ModerationCog requires a valid API key to function.")
 
-# OpenRouter API endpoint
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-# Dedicated channel for logging moderation actions
-MOD_LOG_CHANNEL_ID = int(os.getenv("MOD_LOG_CHANNEL_ID", "1369437572689952900"))  # Set this to your log channel ID or use env var
-# Choose a multimodal model from OpenRouter capable of processing text and images
-# Examples: 'openai/gpt-4o', 'google/gemini-pro-vision', 'anthropic/claude-3-opus-20240229'
-# Ensure the model you choose supports image URLs
 OPENROUTER_MODEL = "google/gemini-2.5-flash-preview" # Make sure this model is available via your OpenRouter key
 
-# Discord Configuration
-MODERATOR_ROLE_ID = 1361031007536549979 # Role to ping for violations
-SUICIDAL_PING_ROLE_ID = 123456789012345678  # Placeholder role ID to ping for suicidal content
-BOT_COMMANDS_CHANNEL_ID = [1360717341775630637, 1361038501902291135] # <#1360717341775630637>
-SUGGESTIONS_CHANNEL_ID = 1361752490210492489 # <#1361752490210492489>
-# Add the IDs of your designated NSFW channels here for Rule 1 check
-NSFW_CHANNEL_IDS = [1360708304187297844, 1360842650617647164, 1360842660213952713, 1360842670473216030, 1361081722426364006, 1360859057644245063, 1361892988539896029, 1365524778735239268, 1361097898799927437, 1361097565591961640, 1360842695806812180, 1361097983097049210] # Example: [123456789012345678, 987654321098765432]
+# --- Per-Guild Discord Configuration ---
+GUILD_CONFIG_PATH = "/home/server/wdiscordbot-json-data"
+try:
+    with open(GUILD_CONFIG_PATH, "r", encoding="utf-8") as f:
+        GUILD_CONFIG = json.load(f)
+except Exception as e:
+    print(f"Failed to load per-guild config from {GUILD_CONFIG_PATH}: {e}")
+    GUILD_CONFIG = {}
+
+def save_guild_config():
+    try:
+        with open(GUILD_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(GUILD_CONFIG, f, indent=2)
+    except Exception as e:
+        print(f"Failed to save per-guild config: {e}")
+
+def get_guild_config(guild_id: int, key: str, default=None):
+    guild_str = str(guild_id)
+    if guild_str in GUILD_CONFIG and key in GUILD_CONFIG[guild_str]:
+        return GUILD_CONFIG[guild_str][key]
+    return default
+
+def set_guild_config(guild_id: int, key: str, value):
+    guild_str = str(guild_id)
+    if guild_str not in GUILD_CONFIG:
+        GUILD_CONFIG[guild_str] = {}
+    GUILD_CONFIG[guild_str][key] = value
+    save_guild_config()
 
 # Server rules to provide context to the AI
 SERVER_RULES = """
@@ -86,6 +100,41 @@ class ModerationCog(commands.Cog):
         """Clean up the session when the cog is unloaded."""
         await self.session.close()
         print("ModerationCog Unloaded, session closed.")
+
+    @app_commands.command(name="modset", description="Set a moderation config value for this guild (admin only).")
+    @app_commands.describe(key="Config key (e.g. MOD_LOG_CHANNEL_ID)", value="Value (int, comma-separated list, or string)")
+    async def modset(self, interaction: discord.Interaction, key: str, value: str):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+            return
+        guild_id = interaction.guild.id
+        # Try to parse value as int, list of ints, or fallback to string
+        parsed_value = value
+        if "," in value:
+            try:
+                parsed_value = [int(v.strip()) for v in value.split(",")]
+            except Exception:
+                parsed_value = [v.strip() for v in value.split(",")]
+        else:
+            try:
+                parsed_value = int(value)
+            except Exception:
+                pass
+        set_guild_config(guild_id, key, parsed_value)
+        await interaction.response.send_message(f"Set `{key}` to `{parsed_value}` for this guild.", ephemeral=True)
+
+    @app_commands.command(name="modenable", description="Enable or disable moderation for this guild (admin only).")
+    @app_commands.describe(enabled="Enable moderation (true/false)")
+    async def modenable(self, interaction: discord.Interaction, enabled: bool):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+            return
+        set_guild_config(interaction.guild.id, "ENABLED", enabled)
+        await interaction.response.send_message(f"Moderation is now {'enabled' if enabled else 'disabled'} for this guild.", ephemeral=True)
+
+    async def setup_hook(self):
+        self.bot.tree.add_command(self.modset)
+        self.bot.tree.add_command(self.modenable)
 
     async def query_openrouter(self, message: discord.Message, message_content: str, image_urls: list[str]):
         """
@@ -275,8 +324,9 @@ Now, analyze the provided message content and images:
         reasoning = ai_decision.get("reasoning", "No reasoning provided.")
         action = ai_decision.get("action", "NOTIFY_MODS").upper() # Default to notify mods
 
-        moderator_role = message.guild.get_role(MODERATOR_ROLE_ID)
-        mod_ping = moderator_role.mention if moderator_role else f"Moderators (Role ID {MODERATOR_ROLE_ID} not found)"
+        moderator_role_id = get_guild_config(message.guild.id, "MODERATOR_ROLE_ID")
+        moderator_role = message.guild.get_role(moderator_role_id) if moderator_role_id else None
+        mod_ping = moderator_role.mention if moderator_role else f"Moderators (Role ID {moderator_role_id} not found)"
 
         # --- Prepare Notification ---
         notification_embed = discord.Embed(
@@ -388,28 +438,28 @@ Now, analyze the provided message content and images:
                     return # Don't notify if no violation and action is IGNORE
 
             # --- Send Notification to Moderators/Relevant Role ---
-            log_channel = None
-            if MOD_LOG_CHANNEL_ID:
-                log_channel = self.bot.get_channel(MOD_LOG_CHANNEL_ID)
+            log_channel_id = get_guild_config(message.guild.id, "MOD_LOG_CHANNEL_ID")
+            log_channel = self.bot.get_channel(log_channel_id) if log_channel_id else None
             if not log_channel:
-                print(f"ERROR: Moderation log channel (ID: {MOD_LOG_CHANNEL_ID}) not found or not configured. Defaulting to message channel.")
+                print(f"ERROR: Moderation log channel (ID: {log_channel_id}) not found or not configured. Defaulting to message channel.")
                 log_channel = message.channel
                 if not log_channel:
                     print(f"ERROR: Could not find even the original message channel {message.channel.id} to send notification.")
                     return
 
             if action == "SUICIDAL":
-                suicidal_role = message.guild.get_role(SUICIDAL_PING_ROLE_ID)
-                ping_target = suicidal_role.mention if suicidal_role else f"Role ID {SUICIDAL_PING_ROLE_ID} (Suicidal Content)"
+                suicidal_role_id = get_guild_config(message.guild.id, "SUICIDAL_PING_ROLE_ID")
+                suicidal_role = message.guild.get_role(suicidal_role_id) if suicidal_role_id else None
+                ping_target = suicidal_role.mention if suicidal_role else f"Role ID {suicidal_role_id} (Suicidal Content)"
                 if not suicidal_role:
-                    print(f"ERROR: Suicidal ping role ID {SUICIDAL_PING_ROLE_ID} not found.")
+                    print(f"ERROR: Suicidal ping role ID {suicidal_role_id} not found.")
                 final_message = f"{ping_target}\n{action_taken_message}"
                 await log_channel.send(content=final_message, embed=notification_embed)
             elif moderator_role: # For other violations
                 final_message = f"{mod_ping}\n{action_taken_message}"
                 await log_channel.send(content=final_message, embed=notification_embed)
             else: # Fallback if moderator role is also not found for non-suicidal actions
-                print(f"ERROR: Moderator role ID {MODERATOR_ROLE_ID} not found for action {action}.")
+                print(f"ERROR: Moderator role ID {moderator_role_id} not found for action {action}.")
 
 
         except discord.Forbidden as e:
@@ -453,6 +503,9 @@ Now, analyze the provided message content and images:
         # Ignore DMs
         if not message.guild:
             return
+        # Check if moderation is enabled for this guild
+        if not get_guild_config(message.guild.id, "ENABLED", True):
+            return
 
         # --- Suicidal Content Check ---
         message_content_lower = message.content.lower()
@@ -462,29 +515,29 @@ Now, analyze the provided message content and images:
         # Simple check for common bot command prefixes in wrong channels
         common_prefixes = ('!', '?', '.', '$', '%', '/', '-') # Add more if needed
         is_likely_bot_command = message.content.startswith(common_prefixes)
-        is_in_bot_commands_channel = message.channel.id == BOT_COMMANDS_CHANNEL_ID
-        # Also check if it's in the suggestions channel (Rule 7 context)
-        is_in_suggestions_channel = message.channel.id == SUGGESTIONS_CHANNEL_ID
+        bot_commands_channel_ids = get_guild_config(message.guild.id, "BOT_COMMANDS_CHANNEL_ID", [])
+        if isinstance(bot_commands_channel_ids, int):
+            bot_commands_channel_ids = [bot_commands_channel_ids]
+        is_in_bot_commands_channel = message.channel.id in bot_commands_channel_ids
+        suggestions_channel_id = get_guild_config(message.guild.id, "SUGGESTIONS_CHANNEL_ID")
+        is_in_suggestions_channel = message.channel.id == suggestions_channel_id
 
         # If it looks like a command AND it's NOT in the commands channel...
         if is_likely_bot_command and not is_in_bot_commands_channel:
-            # Add exceptions here if needed (e.g., specific channels where commands ARE allowed)
-            # if message.channel.id in [ALLOWED_COMMAND_CHANNELS]:
-            #     pass # Skip rule 6 check for these channels
-            # else:
-                try:
-                    await message.delete()
-                    warning = await message.channel.send(
-                        f"{message.author.mention}, please use bot commands only in <#{BOT_COMMANDS_CHANNEL_ID}> (Rule 6).",
-                        delete_after=20 # Delete the warning after 20 seconds
-                    )
-                    print(f"Deleted message from {message.author} in #{message.channel.name} for violating Rule 6 (Bot Command).")
-                    # Optionally log this to mods if it happens frequently
-                except discord.Forbidden:
-                    print(f"Missing permissions to delete message/send warning in #{message.channel.name} for Rule 6 violation.")
-                except discord.NotFound:
-                    print("Message already deleted (Rule 6 check).")
-                return # Stop further processing for this message
+            try:
+                await message.delete()
+                bot_commands_channel_id = bot_commands_channel_ids[0] if bot_commands_channel_ids else None
+                warning_channel_ref = f"<#{bot_commands_channel_id}>" if bot_commands_channel_id else "the correct channel"
+                warning = await message.channel.send(
+                    f"{message.author.mention}, please use bot commands only in {warning_channel_ref} (Rule 6).",
+                    delete_after=20 # Delete the warning after 20 seconds
+                )
+                print(f"Deleted message from {message.author} in #{message.channel.name} for violating Rule 6 (Bot Command).")
+            except discord.Forbidden:
+                print(f"Missing permissions to delete message/send warning in #{message.channel.name} for Rule 6 violation.")
+            except discord.NotFound:
+                print("Message already deleted (Rule 6 check).")
+            return # Stop further processing for this message
 
         # --- Prepare for AI Analysis ---
         message_content = message.content
@@ -500,7 +553,8 @@ Now, analyze the provided message content and images:
 
         # --- Rule 1 Context (NSFW Channel Check) ---
         # Determine if the current channel is designated as NSFW
-        is_nsfw_channel = message.channel.id in NSFW_CHANNEL_IDS or \
+        nsfw_channel_ids = get_guild_config(message.guild.id, "NSFW_CHANNEL_IDS", [])
+        is_nsfw_channel = message.channel.id in nsfw_channel_ids or \
                           (hasattr(message.channel, 'is_nsfw') and message.channel.is_nsfw())
 
         # --- Call AI for Analysis (Rules 1-5A, 7) ---
