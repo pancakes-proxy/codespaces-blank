@@ -20,7 +20,7 @@ MOD_LOG_CHANNEL_ID = int(os.getenv("MOD_LOG_CHANNEL_ID", "1369437572689952900"))
 # Choose a multimodal model from OpenRouter capable of processing text and images
 # Examples: 'openai/gpt-4o', 'google/gemini-pro-vision', 'anthropic/claude-3-opus-20240229'
 # Ensure the model you choose supports image URLs
-OPENROUTER_MODEL = "google/gemini-flash-1.5" # Make sure this model is available via your OpenRouter key
+OPENROUTER_MODEL = "google/gemini-2.5-flash-preview" # Make sure this model is available via your OpenRouter key
 
 # Discord Configuration
 MODERATOR_ROLE_ID = 1361031007536549979 # Role to ping for violations
