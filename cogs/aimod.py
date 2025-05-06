@@ -14,7 +14,7 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 # Choose a multimodal model from OpenRouter capable of processing text and images
 # Examples: 'openai/gpt-4o', 'google/gemini-pro-vision', 'anthropic/claude-3-opus-20240229'
 # Ensure the model you choose supports image URLs
-OPENROUTER_MODEL = "google/gemini-2.5-flash-preview:thinking" # Make sure this model is available via your OpenRouter key
+OPENROUTER_MODEL = "google/gemini-flash-1.5" # Make sure this model is available via your OpenRouter key
 
 # Discord Configuration
 MODERATOR_ROLE_ID = 1361031007536549979 # Role to ping for violations
@@ -39,6 +39,81 @@ SERVER_RULES = """
 If someone breaks the rules, ping <@&1361031007536549979>.
 """
 
+# --- Suicidal Content Detection Configuration ---
+SUICIDAL_KEYWORDS = [
+    "suicide", "kill myself", "end my life", "unalive myself", "want to die",
+    "can't go on", "hopeless", "worthless", "burden", "self-harm", "cut myself",
+    "hang myself", "jump off", "shoot myself", "overdose", "pills", "rope",
+    "bridge", "gun", "razor", "blade", "slit wrists", "dieing", "kms", "iwtd",
+    "depressed", "anxious", "sad", "lonely", "empty", "numb", "pain", "suffering",
+    "struggling", "help me", "i need help", "i'm not okay", "i can't take it anymore",
+    "what's the point", "nothing matters", "i give up", "i'm done", "goodbye world",
+    "final message", "last words", "ending it all", "checking out", "fade away",
+    "disappear", "not here anymore", "better off dead", "wish i wasn't here",
+    "can't handle this", "too much to bear", "breaking point", "losing control",
+    "darkness", "void", "abyss", "trapped", "stuck", "no way out", "can't escape",
+    "drowning", "suffocating", "choking", "can't breathe", "heavy heart", "aching soul",
+    "broken spirit", "shattered", "crushed", "defeated", "overwhelmed", "exhausted",
+    "tired of living", "ready to leave", "peace at last", "eternal rest", "sleep forever",
+    "release", "escape", "freedom", "relief", "end it", "finish it", "stop the pain",
+    "make it stop", "can't feel anything", "wish I could disappear", "ghost", "invisible",
+    "unseen", "unheard", "ignored", "forgotten", "alone", "isolated", "abandoned",
+    "rejected", "failed", "failure", "mistake", "regret", "shame", "guilt", "blame",
+    "fault", "punishment", "deserve to die", "shouldn't be alive", "waste of space",
+    "nuisance", "problem", "burden", "drain", "leech", "parasite", "useless", "pointless",
+    "meaningless", "insignificant", "irrelevant", "invisible", "transparent", "hollow",
+    "empty shell", "robot", "zombie", "automaton", "puppet", "slave", "prisoner", "captive",
+    "chained", "bound", "restricted", "limited", "confined", "trapped", "cornered",
+    "at bay", "backed into a corner", "wall", "dead end", "no exit", "cul-de-sac",
+    "maze", "labyrinth", "tangle", "knot", "snare", "trap", "pitfall", "quicksand",
+    "swamp", "mire", "bog", "mud", "dirt", "dust", "ashes", "ruin", "wreckage",
+    "debris", "fragments", "shards", "splinters", "pieces", "bits", "scraps", "remnants",
+    "leftovers", "residue", "dregs", "sediment", "sludge", "goo", "muck", "grime",
+    "filth", "dirt", "stain", "blemish", "scar", "wound", "bruise", "cut", "gash",
+    "laceration", "puncture", "stab", "shot", "blast", "explosion", "fire", "flame",
+    "burn", "scald", "freeze", "frostbite", "hypothermia", "heatstroke", "sunstroke",
+    "drowning", "suffocation", "asphyxiation", "strangulation", "choking", "poison",
+    "venom", "toxin", "drug", "alcohol", "overdose", "suicide attempt", "failed attempt",
+    "survivor", "recovery", "healing", "hope", "light", "future", "tomorrow", "change",
+    "support", "help", "resources", "talk", "share", "listen", "understand", "care",
+    "love", "friendship", "family", "community", "strength", "courage", "resilience",
+    "fight", "survive", "live", "breathe", "exist", "be", "am", "is", "are", "was",
+    "were", "will be", "can be", "could be", "should be", "would be", "might be",
+    "may be", "must be", "have been", "has been", "had been", "will have been",
+    "can have been", "could have been", "should have been", "would have been",
+    "might have been", "may have been", "must have been", "being", "been", "to be",
+    "not to be", "that is the question", "whether 'tis nobler in the mind to suffer",
+    "the slings and arrows of outrageous fortune", "or to take arms against a sea of troubles",
+    "and by opposing end them", "to die", "to sleep", "no more", "and by a sleep to say we end",
+    "the heart-ache and the thousand natural shocks", "that flesh is heir to", "'tis a consummation",
+    "devoutly to be wish'd", "to die", "to sleep", "to sleep", "perchance to dream", "ay",
+    "there's the rub", "for in that sleep of death what dreams may come", "when we have shuffled off this mortal coil",
+    "must give us pause", "there's the respect", "that makes calamity of so long life",
+    "for who would bear the whips and scorns of time", "the oppressor's wrong", "the proud man's contumely",
+    "the pangs of despis'd love", "the law's delay", "the insolence of office", "and the spurns",
+    "that patient merit of the unworthy takes", "when he himself might his quietus make",
+    "with a bare bodkin", "who would fardels bear", "to grunt and sweat under a weary life",
+    "but that the dread of something after death", "the undiscover'd country from whose bourn",
+    "no traveller returns", "puzzles the will", "and makes us rather bear those ills we have",
+    "than fly to others that we know not of", "thus conscience does make cowards of us all",
+    "and thus the native hue of resolution", "is sicklied o'er with the pale cast of thought",
+    "and enterprises of great pith and moment", "with this regard their currents turn awry",
+    "and lose the name of action", "soft you now", "the fair Ophelia", "nymph", "in thy orisons",
+    "be all my sins remember'd"
+] # Add more keywords as needed
+
+SUICIDAL_HELP_RESOURCES = """
+It sounds like you might be going through a difficult time. Please consider reaching out for help. Here are some resources that can provide support:
+
+**Crisis Text Line:** Text HOME to 741741 from anywhere in the US, anytime, about any type of crisis.
+**The National Suicide Prevention Lifeline:** 988
+**The Trevor Project:** 1-866-488-7386 (for LGBTQ youth)
+**The Jed Foundation:** https://www.jedfoundation.org/
+**The Crisis Prevention and Response Center:** https://www.crisistextline.org/
+
+Remember, you are not alone and help is available.
+"""
+
 class ModerationCog(commands.Cog):
     """
     A Discord Cog that uses OpenRouter AI to moderate messages based on server rules.
@@ -54,7 +129,7 @@ class ModerationCog(commands.Cog):
             print("\n" + "="*60)
             print("=== WARNING: AI_API_KEY environment variable not found or empty! ===")
             print("=== The Moderation Cog requires a valid API key to function. ===")
-            print("=== Make sure the 'AI_API_KEY' environment variable is set correctly. ===")
+            print("=== Make sure the 'AI_API_API_KEY' environment variable is set correctly. ===")
             print("="*60 + "\n")
         else:
              print("Successfully loaded API key from AI_API_KEY environment variable.")
@@ -234,7 +309,7 @@ Now, analyze the provided message content and images:
              return None
         except Exception as e:
             # Catch any other unexpected errors during the API call
-            print(f"An unexpected error occurred during OpenRouter API call: {e}")
+            print(f"An unexpected error occurred during action execution for message {message.id}: {e}")
             return None
 
     async def handle_violation(self, message: discord.Message, ai_decision: dict):
@@ -387,6 +462,20 @@ Now, analyze the provided message content and images:
         # Ignore DMs
         if not message.guild:
             return
+
+        # --- Suicidal Content Check ---
+        message_content_lower = message.content.lower()
+        if any(keyword in message_content_lower for keyword in SUICIDAL_KEYWORDS):
+            try:
+                dm_channel = await message.author.create_dm()
+                await dm_channel.send(SUICIDAL_HELP_RESOURCES)
+                print(f"Sent suicidal help resources to user {message.author} via DM.")
+            except discord.Forbidden:
+                print(f"Could not DM suicidal help resources to {message.author} (DMs likely disabled).")
+            except Exception as e:
+                print(f"Error sending suicidal help resources DM to {message.author}: {e}")
+            # Optionally, you could add a flag here to skip further AI moderation for this message
+            # return # Uncomment this line if you want to stop processing after sending resources
 
         # --- Rule 6 Check (Channel Usage - Basic) ---
         # Simple check for common bot command prefixes in wrong channels
