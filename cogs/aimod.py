@@ -8,7 +8,11 @@ import os # To load API key from environment variables
 # --- Configuration ---
 # Load the OpenRouter API key from the environment variable "AI_API_KEY"
 # Fallback to a placeholder if the environment variable is not set.
-OPENROUTER_API_KEY = os.getenv("AI_API_KEY", "YOUR_OPENROUTER_API_KEY")
+OPENROUTER_API_KEY = os.getenv("AI_API_KEY")
+# Error if no API key
+if not OPENROUTER_API_KEY:
+    raise ValueError("Error: AI_API_KEY environment variable is not set. The ModerationCog requires a valid API key to function.")
+
 # OpenRouter API endpoint
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 # Choose a multimodal model from OpenRouter capable of processing text and images
