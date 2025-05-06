@@ -46,8 +46,8 @@ It sounds like you might be going through a difficult time. Please consider reac
 **Crisis Text Line:** Text HOME to 741741 from anywhere in the US, anytime, about any type of crisis.
 **The National Suicide Prevention Lifeline:** 988
 **The Trevor Project:** 1-866-488-7386 (for LGBTQ youth)
-**The Jed Foundation:** https://www.jedfoundation.org/
-**The Crisis Prevention and Response Center:** https://www.crisistextline.org/
+**The Jed Foundation:** <https://www.jedfoundation.org/>
+**The Crisis Prevention and Response Center:** <https://www.crisistextline.org/>
 
 Remember, you are not alone and help is available.
 """
