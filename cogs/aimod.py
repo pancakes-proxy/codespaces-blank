@@ -41,15 +41,19 @@ If someone breaks the rules, ping <@&1361031007536549979>.
 """
 
 SUICIDAL_HELP_RESOURCES = """
-It sounds like you might be going through a difficult time. Please consider reaching out for help. Here are some resources that can provide support:
+Hey, I'm really concerned to hear you're feeling this way. Please know that you're not alone and there are people who want to support you.
+Your well-being is important to us on this server.
 
-**Crisis Text Line:** Text HOME to 741741 from anywhere in the US, anytime, about any type of crisis.
-**The National Suicide Prevention Lifeline:** 988
-**The Trevor Project:** 1-866-488-7386 (for LGBTQ youth)
-**The Jed Foundation:** <https://www.jedfoundation.org/>
-**The Crisis Prevention and Response Center:** <https://www.crisistextline.org/>
+Here are some immediate resources that can offer help right now:
 
-Remember, you are not alone and help is available.
+- **National Crisis and Suicide Lifeline (US):** Call or text **988**. This is available 24/7, free, and confidential.
+- **Crisis Text Line (US):** Text **HOME** to **741741**. This is also a 24/7 free crisis counseling service.
+- **The Trevor Project (for LGBTQ youth):** Call **1-866-488-7386** or visit their website for chat/text options: <https://www.thetrevorproject.org/get-help/>
+- **The Jed Foundation (Mental Health Resource Center):** Provides resources for teens and young adults: <https://www.jedfoundation.org/>
+- **Find A Helpline (International):** If you're outside the US, this site can help you find resources in your country: <https://findahelpline.com/>
+
+Please reach out to one of these. We've also alerted our server's support team so they are aware and can offer a listening ear or further guidance if you're comfortable.
+You matter, and help is available.
 """
 
 class ModerationCog(commands.Cog):
