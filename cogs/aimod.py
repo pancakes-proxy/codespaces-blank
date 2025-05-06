@@ -128,7 +128,7 @@ class ModerationCog(commands.Cog):
             print("\n" + "="*60)
             print("=== WARNING: AI_API_KEY environment variable not found or empty! ===")
             print("=== The Moderation Cog requires a valid API key to function. ===")
-            print("=== Make sure the 'AI_API_KEY' environment variable is set correctly. ===")
+            print("=== Make sure the 'AI_API_API_KEY' environment variable is set correctly. ===")
             print("="*60 + "\n")
         else:
              print("Successfully loaded API key from AI_API_KEY environment variable.")
@@ -308,7 +308,7 @@ Now, analyze the provided message content and images:
              return None
         except Exception as e:
             # Catch any other unexpected errors during the API call
-            print(f"An unexpected error occurred during OpenRouter API call: {e}")
+            print(f"An unexpected error occurred during action execution for message {message.id}: {e}")
             return None
 
     async def handle_violation(self, message: discord.Message, ai_decision: dict):
@@ -475,8 +475,6 @@ Now, analyze the provided message content and images:
                 print(f"Error sending suicidal help resources DM to {message.author}: {e}")
             # Optionally, you could add a flag here to skip further AI moderation for this message
             # return # Uncomment this line if you want to stop processing after sending resources
-
-        # --- Rule 6 Check (Channel Usage - Basic) ---
 
         # --- Rule 6 Check (Channel Usage - Basic) ---
         # Simple check for common bot command prefixes in wrong channels
