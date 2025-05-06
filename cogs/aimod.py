@@ -26,14 +26,15 @@ NSFW_CHANNEL_IDS = [1360708304187297844, 1360842650617647164, 136084266021395271
 # Server rules to provide context to the AI
 SERVER_RULES = """
 # Server Rules
-1. Keep NSFW stuff in NSFW channels. No full-on porn or explicit images outside of those spaces. Emojis and jokes are fine.
-2. Be respectful. No harassment, hate, or bullying.
-3. No discrimination. This includes gender identity, sexual orientation, race, etc.
-4. No AI-generated porn.
-5. No pedophilia.
-(5A: no IRL porn (for this ban the user and delete the message))
-6. Use the right channels. Bot commands go in <#1360717341775630637>, unless it’s part of a bot game or event.
-7. Suggestions are welcome! Drop them in <#1361752490210492489> if you’ve got any ideas.
+
+- Keep NSFW stuff in NSFW channels. No full-on porn or explicit images outside of those spaces. Emojis, jokes and stickers are fine
+- No real life pornography.
+- Be respectful. No harassment, hate, or bullying, unless its clearly a lighthearted joke.
+- No discrimination. This includes gender identity, sexual orientation, race, etc.
+- No AI-generated porn.
+- No pedophilia. This includes lolicon/shotacon.
+- Use the right channels. Bot commands go in <#1360717341775630637>, unless it's part of a bot game or event.
+- Suggestions are welcome! Drop them in <#1361752490210492489> if you've got any ideas.
 
 If someone breaks the rules, ping <@&1361031007536549979>.
 """
