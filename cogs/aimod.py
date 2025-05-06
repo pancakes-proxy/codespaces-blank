@@ -15,6 +15,8 @@ if not OPENROUTER_API_KEY:
 
 # OpenRouter API endpoint
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+# Dedicated channel for logging moderation actions
+MOD_LOG_CHANNEL_ID = int(os.getenv("MOD_LOG_CHANNEL_ID", "1369437572689952900"))  # Set this to your log channel ID or use env var
 # Choose a multimodal model from OpenRouter capable of processing text and images
 # Examples: 'openai/gpt-4o', 'google/gemini-pro-vision', 'anthropic/claude-3-opus-20240229'
 # Ensure the model you choose supports image URLs
@@ -43,7 +45,6 @@ SERVER_RULES = """
 
 If someone breaks the rules, ping <@&1361031007536549979>.
 """
-
 SUICIDAL_HELP_RESOURCES = """
 Hey, I'm really concerned to hear you're feeling this way. Please know that you're not alone and there are people who want to support you.
 Your well-being is important to us on this server.
@@ -289,6 +290,12 @@ Now, analyze the provided message content and images:
         notification_embed.add_field(name="AI Suggested Action", value=f"`{action}`", inline=True)
         notification_embed.add_field(name="AI Reasoning", value=f"_{reasoning}_", inline=False)
         notification_embed.add_field(name="Message Link", value=f"[Jump to Message]({message.jump_url})", inline=False)
+        # Log message content and attachments for audit purposes
+        msg_content = message.content if message.content else "*No text content*"
+        notification_embed.add_field(name="Message Content", value=msg_content[:1024], inline=False)
+        if message.attachments:
+            attachment_urls = "\n".join(a.url for a in message.attachments)
+            notification_embed.add_field(name="Attachments", value=attachment_urls[:1024], inline=False)
         notification_embed.set_footer(text=f"AI Model: {OPENROUTER_MODEL}")
         notification_embed.timestamp = discord.utils.utcnow()
 
@@ -381,10 +388,15 @@ Now, analyze the provided message content and images:
                     return # Don't notify if no violation and action is IGNORE
 
             # --- Send Notification to Moderators/Relevant Role ---
-            log_channel = message.channel # Or replace with: self.bot.get_channel(YOUR_MOD_LOG_CHANNEL_ID)
+            log_channel = None
+            if MOD_LOG_CHANNEL_ID:
+                log_channel = self.bot.get_channel(MOD_LOG_CHANNEL_ID)
             if not log_channel:
-                print(f"ERROR: Could not find channel {message.channel.id} to send notification.")
-                return
+                print(f"ERROR: Moderation log channel (ID: {MOD_LOG_CHANNEL_ID}) not found or not configured. Defaulting to message channel.")
+                log_channel = message.channel
+                if not log_channel:
+                    print(f"ERROR: Could not find even the original message channel {message.channel.id} to send notification.")
+                    return
 
             if action == "SUICIDAL":
                 suicidal_role = message.guild.get_role(SUICIDAL_PING_ROLE_ID)
