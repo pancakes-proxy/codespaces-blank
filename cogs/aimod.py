@@ -165,6 +165,7 @@ class ModerationCog(commands.Cog):
         "BOT_COMMANDS_CHANNEL_ID",
         "SUGGESTIONS_CHANNEL_ID",
         "NSFW_CHANNEL_IDS",
+        "AI_MODEL",
     ]
 
     async def modset_key_autocomplete(
@@ -289,11 +290,54 @@ class ModerationCog(commands.Cog):
 
         await interaction.response.send_message(f"Cleared {len(infractions)} infraction(s) for {user.mention}.", ephemeral=False)
 
+    @app_commands.command(name="modsetmodel", description="Change the AI model used for moderation (admin only).")
+    @app_commands.describe(model="The OpenRouter model to use (e.g., 'google/gemini-2.5-flash-preview', 'anthropic/claude-3-opus-20240229')")
+    async def modsetmodel(self, interaction: discord.Interaction, model: str):
+        # Check if user has administrator permission
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+            return
+
+        # Validate the model name (basic validation)
+        if not model or len(model) < 5 or "/" not in model:
+            await interaction.response.send_message("Invalid model format. Please provide a valid OpenRouter model ID (e.g., 'google/gemini-2.5-flash-preview').", ephemeral=False)
+            return
+
+        # Save the model to guild configuration
+        guild_id = interaction.guild.id
+        set_guild_config(guild_id, "AI_MODEL", model)
+
+        # Update the global model for immediate effect
+        global OPENROUTER_MODEL
+        OPENROUTER_MODEL = model
+
+        await interaction.response.send_message(f"AI moderation model updated to `{model}` for this guild.", ephemeral=False)
+
+    @app_commands.command(name="modgetmodel", description="View the current AI model used for moderation.")
+    async def modgetmodel(self, interaction: discord.Interaction):
+        # Get the model from guild config, fall back to global default
+        guild_id = interaction.guild.id
+        model_used = get_guild_config(guild_id, "AI_MODEL", OPENROUTER_MODEL)
+
+        # Create an embed to display the model information
+        embed = discord.Embed(
+            title="AI Moderation Model",
+            description=f"The current AI model used for moderation in this server is:",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Model", value=f"`{model_used}`", inline=False)
+        embed.add_field(name="Default Model", value=f"`{OPENROUTER_MODEL}`", inline=False)
+        embed.set_footer(text="Use /modsetmodel to change the model")
+
+        await interaction.response.send_message(embed=embed, ephemeral=False)
+
     async def setup_hook(self):
         self.bot.tree.add_command(self.modset)
         self.bot.tree.add_command(self.modenable)
         self.bot.tree.add_command(self.viewinfractions)
         self.bot.tree.add_command(self.clearinfractions)
+        self.bot.tree.add_command(self.modsetmodel)
+        self.bot.tree.add_command(self.modgetmodel)
 
     async def query_openrouter(self, message: discord.Message, message_content: str, user_history: str):
         """
@@ -402,6 +446,10 @@ Now, analyze the provided message content based on the rules and instructions gi
             }
         ]
 
+        # Get guild-specific model if configured, otherwise use default
+        guild_id = message.guild.id
+        model_to_use = get_guild_config(guild_id, "AI_MODEL", OPENROUTER_MODEL)
+
         # Structure the request payload for OpenRouter
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -411,7 +459,7 @@ Now, analyze the provided message content based on the rules and instructions gi
             # "X-Title": "Your Bot Name", # Replace with your bot's name
         }
         payload = {
-            "model": OPENROUTER_MODEL,
+            "model": model_to_use,
             "messages": [
                 {"role": "system", "content": system_prompt_text},
                 {"role": "user", "content": user_prompt_content_list}
@@ -423,7 +471,7 @@ Now, analyze the provided message content based on the rules and instructions gi
         }
 
         try:
-            print(f"Querying OpenRouter model {OPENROUTER_MODEL}...")
+            print(f"Querying OpenRouter model {model_to_use}...")
             async with self.session.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=60) as response: # Added timeout
                 response_text = await response.text() # Get raw text for debugging
                 # print(f"OpenRouter Raw Response Status: {response.status}")
@@ -502,7 +550,7 @@ Now, analyze the provided message content based on the rules and instructions gi
         moderator_role = message.guild.get_role(moderator_role_id) if moderator_role_id else None
         mod_ping = moderator_role.mention if moderator_role else f"Moderators (Role ID {moderator_role_id} not found)"
 
-        current_timestamp_iso = datetime.datetime.utcnow().isoformat() + "Z"
+        current_timestamp_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         # --- Transmit action info over HTTP POST ---
         try:
@@ -525,7 +573,7 @@ Now, analyze the provided message content based on the rules and instructions gi
                     "violation": ai_decision.get("violation", False),
                     "message_content": message.content[:1024] if message.content else "",
                     "full_message_content": message.content if message.content else "",
-                    "ai_model": OPENROUTER_MODEL,
+                    "ai_model": model_used,
                     "result": "pending_system_action" # Indicates AI decision received, system action pending
                 }
                 headers = {
@@ -558,8 +606,10 @@ Now, analyze the provided message content based on the rules and instructions gi
         # Log message content and attachments for audit purposes
         msg_content = message.content if message.content else "*No text content*"
         notification_embed.add_field(name="Message Content", value=msg_content[:1024], inline=False)
-        notification_embed.set_footer(text=f"AI Model: {OPENROUTER_MODEL}")
-        notification_embed.timestamp = discord.utils.utcnow()
+        # Get the model from guild config, fall back to global default
+        model_used = get_guild_config(guild_id, "AI_MODEL", OPENROUTER_MODEL)
+        notification_embed.set_footer(text=f"AI Model: {model_used}")
+        notification_embed.timestamp = discord.utils.utcnow() # Using discord.utils.utcnow() which is still supported
 
         action_taken_message = "" # To append to the notification
 
@@ -771,7 +821,6 @@ Now, analyze the provided message content based on the rules and instructions gi
             return
 
         # --- Suicidal Content Check ---
-        message_content_lower = message.content.lower()
         # Suicidal keyword check removed; handled by OpenRouter AI moderation.
 
                 # --- Rule 6 Check (Channel Usage - Basic) ---
