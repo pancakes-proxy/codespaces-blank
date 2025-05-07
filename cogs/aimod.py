@@ -221,14 +221,13 @@ class ModerationCog(commands.Cog):
         self.bot.tree.add_command(self.modset)
         self.bot.tree.add_command(self.modenable)
 
-    async def query_openrouter(self, message: discord.Message, message_content: str, image_urls: list[str], user_history: str):
+    async def query_openrouter(self, message: discord.Message, message_content: str, user_history: str):
         """
-        Sends the message content, image URLs, and user history to the OpenRouter API for analysis.
+        Sends the message content and user history to the OpenRouter API for analysis.
 
         Args:
             message: The original discord.Message object.
             message_content: The text content of the message.
-            image_urls: A list of URLs for images attached to the message.
             user_history: A string summarizing the user's past infractions.
 
         Returns:
@@ -248,7 +247,7 @@ class ModerationCog(commands.Cog):
 
         # Construct the prompt for the AI model
         system_prompt_text = f"""You are an AI moderation assistant for a Discord server.
-Your primary function is to analyze message content and any attached images based STRICTLY on the server rules provided below.
+Your primary function is to analyze message content based STRICTLY on the server rules provided below.
 
 Server Rules:
 ---
@@ -256,11 +255,11 @@ Server Rules:
 ---
 
 Instructions:
-1. Review the text content AND any provided image URLs against EACH rule.
-2. Determine if ANY rule is violated. When evaluating, consider the server's culture where edgy/sexual jokes are common:
-   - For Rule 1 (NSFW content): Remember that the server rules state "Emojis, jokes and stickers are fine" outside NSFW channels. Only flag a Rule 1 violation for text or images if it's **explicitly pornographic or full-on explicit imagery/text**, not just suggestive emojis (like `:blowme:`), stickers, or lighthearted sexual jokes. These lighter elements are generally permissible.
-   - For general disrespectful behavior, harassment, or bullying (Rule 2 & 3): Only flag a violation if the intent appears **genuinely malicious or serious**, not just an edgy/sexual joke.
-   - For **explicit slurs or severe discriminatory language** (Rule 3): These are violations **regardless of joking intent**.
+1. Review the text content against EACH rule.
+2. Determine if ANY rule is violated. When evaluating, consider the server's culture where **extremely edgy, dark, and sexual humor, including potentially offensive jokes (e.g., rape jokes, saying you want to be raped), are common and generally permissible IF THEY ARE CLEARLY JOKES and not targeted harassment or explicit rule violations.**
+   - For Rule 1 (NSFW content): Remember that the server rules state "Emojis, jokes and stickers are fine" outside NSFW channels. Only flag a Rule 1 violation for text if it's **explicitly pornographic or full-on explicit text that would qualify as actual pornography if written out**, not just suggestive emojis (like `:blowme:`), stickers, or dark/sexual jokes. These lighter elements, even if very edgy, are permissible.
+   - For general disrespectful behavior, harassment, or bullying (Rule 2 & 3): Only flag a violation if the intent appears **genuinely malicious, targeted, or serious**, not just an edgy/sexual/dark joke, even if that joke is offensive in a general sense. The server allows for a high degree of "wild" statements.
+   - For **explicit slurs or severe discriminatory language** (Rule 3): These are violations **regardless of joking intent if they are used in a targeted or hateful manner**. Context is key.
 After considering the above, pay EXTREME attention to rules 5 (Pedophilia) and 5A (IRL Porn) – these are always severe. Rule 4 (AI Porn) is also critical. Prioritize these severe violations.
 3. Respond ONLY with a single JSON object containing the following keys:
     - "violation": boolean (true if any rule is violated, false otherwise)
@@ -278,8 +277,8 @@ After considering the above, pay EXTREME attention to rules 5 (Pedophilia) and 5
          - Rule 4 (AI Porn) or Rule 1 (Explicit content in wrong channel): Minimum "DELETE". Escalate to TIMEOUTS/KICK/BAN based on history or severity.
          - Rule 2/3 (Disrespect/Discrimination): "WARN" or "DELETE" for first/minor. Escalate to TIMEOUTS/KICK/BAN for repeated/severe. Explicit slurs are more severe.
        Suicidal Content:
-         If the message content expresses **clear, direct, and serious suicidal ideation, intent, planning, or recent attempts** (e.g., 'I am going to end my life and have a plan', 'I survived my attempt last night'), ALWAYS use "SUICIDAL" as the action, and set "violation" to true, with "rule_violated" as "Suicidal Content".
-         For casual, edgy, or ambiguous statements like 'imma kms' that lack clear serious intent, consider "NOTIFY_MODS" or "IGNORE".
+         If the message content expresses **clear, direct, and serious suicidal ideation, intent, planning, or recent attempts** (e.g., 'I am going to end my life and have a plan', 'I survived my attempt last night', 'I wish I hadn't woken up after trying'), ALWAYS use "SUICIDAL" as the action, and set "violation" to true, with "rule_violated" as "Suicidal Content".
+         For casual, edgy, hyperbolic, or ambiguous statements like 'imma kms', 'just kill me now', 'I want to die (lol)', or phrases that are clearly part of edgy humor/banter rather than a genuine cry for help, you should lean towards "IGNORE" or "NOTIFY_MODS" if there's slight ambiguity but no clear serious intent. **Do NOT flag 'imma kms' as "SUICIDAL" unless there is very strong supporting context indicating genuine, immediate, and serious intent.**
        If unsure but suspicious, or if the situation is complex: "NOTIFY_MODS".
        Default action for minor first-time rule violations should be "WARN" or "DELETE" (if applicable).
        Do not suggest "KICK" or "BAN" lightly; reserve for severe or repeated major offenses.
@@ -290,7 +289,7 @@ Example Response (Violation):
 {{
   "violation": true,
   "rule_violated": "5A",
-  "reasoning": "The attached image clearly depicts IRL non-consensual sexual content involving minors, violating rule 5A.",
+  "reasoning": "The message content clearly depicts IRL non-consensual sexual content involving minors, violating rule 5A.",
   "action": "BAN"
 }}
 
@@ -298,7 +297,7 @@ Example Response (No Violation):
 {{
   "violation": false,
   "rule_violated": "None",
-  "reasoning": "The message is a respectful discussion and contains no prohibited content or images.",
+  "reasoning": "The message is a respectful discussion and contains no prohibited content.",
   "action": "IGNORE"
 }}
 
@@ -324,26 +323,10 @@ Message Details:
 - Channel: #{message.channel.name} (ID: {message.channel.id})
 - Message Content: "{message_content}"
 
-Now, analyze the provided message content and images based on the rules and instructions given in the system prompt:
+Now, analyze the provided message content based on the rules and instructions given in the system prompt:
 """
             }
         ]
-
-        # Add image URLs to the user prompt content list if any exist
-        if image_urls:
-            user_prompt_content_list.append({
-                "type": "text",
-                "text": "Images included with this prompt were part of the user's message."
-            })
-            for url in image_urls:
-                user_prompt_content_list.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": url,
-                        # Detail level might be adjustable for some models, e.g., "low", "high", "auto"
-                        # "detail": "auto"
-                    }
-                })
 
         # Structure the request payload for OpenRouter
         headers = {
@@ -468,7 +451,6 @@ Now, analyze the provided message content and images based on the rules and inst
                     "violation": ai_decision.get("violation", False),
                     "message_content": message.content[:1024] if message.content else "",
                     "full_message_content": message.content if message.content else "",
-                    "attachments": [a.url for a in message.attachments] if message.attachments else [],
                     "ai_model": OPENROUTER_MODEL,
                     "result": "pending_system_action" # Indicates AI decision received, system action pending
                 }
@@ -502,9 +484,6 @@ Now, analyze the provided message content and images based on the rules and inst
         # Log message content and attachments for audit purposes
         msg_content = message.content if message.content else "*No text content*"
         notification_embed.add_field(name="Message Content", value=msg_content[:1024], inline=False)
-        if message.attachments:
-            attachment_urls = "\n".join(a.url for a in message.attachments)
-            notification_embed.add_field(name="Attachments", value=attachment_urls[:1024], inline=False)
         notification_embed.set_footer(text=f"AI Model: {OPENROUTER_MODEL}")
         notification_embed.timestamp = discord.utils.utcnow()
 
@@ -707,8 +686,8 @@ Now, analyze the provided message content and images based on the rules and inst
         # Ignore messages from bots (including self)
         if message.author.bot:
             return
-        # Ignore messages without content and attachments (unless you specifically want to analyze images alone)
-        if not message.content and not message.attachments:
+        # Ignore messages without content
+        if not message.content:
              return
         # Ignore DMs
         if not message.guild:
@@ -739,7 +718,7 @@ Now, analyze the provided message content and images based on the rules and inst
            message.channel.id not in bot_commands_channel_ids and \
            message.channel.id != suggestions_channel_id:
             try:
-                await message.delete()
+                # await message.delete()
                 bot_commands_channel_mention = f"<#{bot_commands_channel_ids[0]}>" if bot_commands_channel_ids else "the designated bot commands channel"
                 await message.channel.send(
                     f"{message.author.mention}, please use bot commands only in {bot_commands_channel_mention} (Rule 6).",
@@ -756,14 +735,9 @@ Now, analyze the provided message content and images based on the rules and inst
 
         # --- Prepare for AI Analysis ---
         message_content = message.content
-        # Extract image URLs from attachments
-        image_urls = [
-            attachment.url for attachment in message.attachments
-            if attachment.content_type and attachment.content_type.startswith('image/')
-        ]
 
-        # Only proceed with AI analysis if there's text OR images to analyze
-        if not message_content and not image_urls:
+        # Only proceed with AI analysis if there's text to analyze
+        if not message_content:
             return
 
         # --- Rule 1 Context (NSFW Channel Check) ---
@@ -791,7 +765,7 @@ Now, analyze the provided message content and images based on the rules and inst
 
 
         print(f"Analyzing message {message.id} from {message.author} in #{message.channel.name} with history...")
-        ai_decision = await self.query_openrouter(message, message_content, image_urls, user_history_summary)
+        ai_decision = await self.query_openrouter(message, message_content, user_history_summary)
 
         # --- Process AI Decision ---
         if not ai_decision:
