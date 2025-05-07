@@ -89,7 +89,7 @@ def add_user_infraction(guild_id: int, user_id: int, rule_violated: str, action_
     key = f"{guild_id}_{user_id}"
     if key not in USER_INFRACTIONS:
         USER_INFRACTIONS[key] = []
-    
+
     infraction_record = {
         "timestamp": timestamp,
         "rule_violated": rule_violated,
@@ -98,7 +98,7 @@ def add_user_infraction(guild_id: int, user_id: int, rule_violated: str, action_
     }
     USER_INFRACTIONS[key].append(infraction_record)
     # Keep only the last N infractions to prevent the file from growing too large, e.g., last 10
-    USER_INFRACTIONS[key] = USER_INFRACTIONS[key][-10:] 
+    USER_INFRACTIONS[key] = USER_INFRACTIONS[key][-10:]
     save_user_infractions()
 
 # Server rules to provide context to the AI
@@ -217,9 +217,83 @@ class ModerationCog(commands.Cog):
         set_guild_config(interaction.guild.id, "ENABLED", enabled)
         await interaction.response.send_message(f"Moderation is now {'enabled' if enabled else 'disabled'} for this guild.", ephemeral=False)
 
+    @app_commands.command(name="viewinfractions", description="View a user's AI moderation infraction history (mod/admin only).")
+    @app_commands.describe(user="The user to view infractions for")
+    async def viewinfractions(self, interaction: discord.Interaction, user: discord.Member):
+        # Check if user has permission (admin or moderator role)
+        moderator_role_id = get_guild_config(interaction.guild.id, "MODERATOR_ROLE_ID")
+        moderator_role = interaction.guild.get_role(moderator_role_id) if moderator_role_id else None
+
+        has_permission = (interaction.user.guild_permissions.administrator or
+                         (moderator_role and moderator_role in interaction.user.roles))
+
+        if not has_permission:
+            await interaction.response.send_message("You must be an administrator or have the moderator role to use this command.", ephemeral=True)
+            return
+
+        # Get the user's infraction history
+        infractions = get_user_infraction_history(interaction.guild.id, user.id)
+
+        if not infractions:
+            await interaction.response.send_message(f"{user.mention} has no recorded infractions.", ephemeral=False)
+            return
+
+        # Create an embed to display the infractions
+        embed = discord.Embed(
+            title=f"Infraction History for {user.display_name}",
+            description=f"User ID: {user.id}",
+            color=discord.Color.orange()
+        )
+
+        # Add each infraction to the embed
+        for i, infraction in enumerate(infractions, 1):
+            timestamp = infraction.get('timestamp', 'Unknown date')[:19].replace('T', ' ')  # Format ISO timestamp
+            rule = infraction.get('rule_violated', 'Unknown rule')
+            action = infraction.get('action_taken', 'Unknown action')
+            reason = infraction.get('reasoning', 'No reason provided')
+
+            # Truncate reason if it's too long
+            if len(reason) > 200:
+                reason = reason[:197] + "..."
+
+            embed.add_field(
+                name=f"Infraction #{i} - {timestamp}",
+                value=f"**Rule Violated:** {rule}\n**Action Taken:** {action}\n**Reason:** {reason}",
+                inline=False
+            )
+
+        embed.set_footer(text=f"Total infractions: {len(infractions)}")
+        embed.timestamp = discord.utils.utcnow()
+
+        await interaction.response.send_message(embed=embed, ephemeral=False)
+
+    @app_commands.command(name="clearinfractions", description="Clear a user's AI moderation infraction history (admin only).")
+    @app_commands.describe(user="The user to clear infractions for")
+    async def clearinfractions(self, interaction: discord.Interaction, user: discord.Member):
+        # Check if user has administrator permission
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+            return
+
+        # Get the user's infraction history
+        key = f"{interaction.guild.id}_{user.id}"
+        infractions = USER_INFRACTIONS.get(key, [])
+
+        if not infractions:
+            await interaction.response.send_message(f"{user.mention} has no recorded infractions to clear.", ephemeral=False)
+            return
+
+        # Clear the user's infractions
+        USER_INFRACTIONS[key] = []
+        save_user_infractions()
+
+        await interaction.response.send_message(f"Cleared {len(infractions)} infraction(s) for {user.mention}.", ephemeral=False)
+
     async def setup_hook(self):
         self.bot.tree.add_command(self.modset)
         self.bot.tree.add_command(self.modenable)
+        self.bot.tree.add_command(self.viewinfractions)
+        self.bot.tree.add_command(self.clearinfractions)
 
     async def query_openrouter(self, message: discord.Message, message_content: str, user_history: str):
         """
@@ -258,7 +332,7 @@ Instructions:
 1. Review the text content against EACH rule.
 2. Determine if ANY rule is violated. When evaluating, consider the server's culture where **extremely edgy, dark, and sexual humor, including potentially offensive jokes (e.g., rape jokes, saying you want to be raped), are common and generally permissible IF THEY ARE CLEARLY JOKES and not targeted harassment or explicit rule violations.**
    - For Rule 1 (NSFW content): Remember that the server rules state "Emojis, jokes and stickers are fine" outside NSFW channels. Only flag a Rule 1 violation for text if it's **explicitly pornographic or full-on explicit text that would qualify as actual pornography if written out**, not just suggestive emojis (like `:blowme:`), stickers, or dark/sexual jokes. These lighter elements, even if very edgy, are permissible.
-   - For general disrespectful behavior, harassment, or bullying (Rule 2 & 3): Only flag a violation if the intent appears **genuinely malicious, targeted, or serious**, not just an edgy/sexual/dark joke, even if that joke is offensive in a general sense. The server allows for a high degree of "wild" statements.
+   - For general disrespectful behavior, harassment, or bullying (Rule 2 & 3): Only flag a violation if the intent appears **genuinely malicious, targeted, or serious**. This includes considering if a statement, even if technically offensive (e.g., calling someone "stupid," "an idiot," or other light insults), is delivered in a lighthearted, joking manner between users who have a rapport, versus a statement intended to genuinely demean or attack. The server allows for a high degree of "wild" statements and banter; differentiate this from actual bullying or harassment.
    - For **explicit slurs or severe discriminatory language** (Rule 3): These are violations **regardless of joking intent if they are used in a targeted or hateful manner**. Context is key.
 After considering the above, pay EXTREME attention to rules 5 (Pedophilia) and 5A (IRL Porn) – these are always severe. Rule 4 (AI Porn) is also critical. Prioritize these severe violations.
 3. Respond ONLY with a single JSON object containing the following keys:
@@ -536,7 +610,7 @@ Now, analyze the provided message content based on the rules and instructions gi
                 elif action == "TIMEOUT_LONG":
                     duration_seconds = 24 * 60 * 60 # 1 day
                     duration_readable = "1 day"
-                
+
                 if duration_seconds > 0:
                     action_taken_message = f"Action Taken: User **TIMED OUT for {duration_readable}** and message deleted."
                     notification_embed.color = discord.Color.blue()
@@ -546,7 +620,7 @@ Now, analyze the provided message content based on the rules and instructions gi
                     except discord.Forbidden:
                         print(f"WARNING: Missing permissions to delete message before timeout for {message.author}.")
                         action_taken_message += " (Failed to delete message - check permissions)"
-                    
+
                     timeout_reason = f"AI Mod: Rule {rule_violated}. Reason: {reasoning}"
                     # discord.py timeout takes a timedelta object
                     await message.author.timeout(discord.utils.utcnow() + datetime.timedelta(seconds=duration_seconds), reason=timeout_reason)
@@ -703,12 +777,12 @@ Now, analyze the provided message content based on the rules and instructions gi
                 # --- Rule 6 Check (Channel Usage - Basic) ---
         # This rule is handled before AI analysis for efficiency if it's a simple command prefix check.
         # If Rule 6 violations should also go through AI and progressive discipline, this logic would need to move.
-        common_prefixes = ('!', '?', '.', '$', '%', '/', '-') 
+        common_prefixes = ('!', '?', '.', '$', '%', '/', '-')
         is_likely_bot_command = message.content.startswith(common_prefixes)
         bot_commands_channel_ids = get_guild_config(message.guild.id, "BOT_COMMANDS_CHANNEL_ID", [])
         if isinstance(bot_commands_channel_ids, int): # Ensure it's a list
             bot_commands_channel_ids = [bot_commands_channel_ids]
-        
+
         # Check if the current channel is NOT a bot command channel
         # AND the message is likely a bot command
         # AND the message is not in the suggestions channel (if suggestions can also have commands)
@@ -757,9 +831,9 @@ Now, analyze the provided message content based on the rules and instructions gi
             for infr in infractions:
                 history_summary_parts.append(f"- Action: {infr.get('action_taken', 'N/A')} for Rule {infr.get('rule_violated', 'N/A')} on {infr.get('timestamp', 'N/A')[:10]}. Reason: {infr.get('reasoning', 'N/A')[:50]}...")
         user_history_summary = "\n".join(history_summary_parts) if history_summary_parts else "No prior infractions recorded."
-        
+
         # Limit history summary length to prevent excessively long prompts
-        max_history_len = 500 
+        max_history_len = 500
         if len(user_history_summary) > max_history_len:
             user_history_summary = user_history_summary[:max_history_len-3] + "..."
 
