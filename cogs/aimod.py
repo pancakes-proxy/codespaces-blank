@@ -390,10 +390,11 @@ After considering the above, pay EXTREME attention to rules 5 (Pedophilia) and 5
          - Second minor offense / First moderate offense: "TIMEOUT_SHORT" (e.g., 10 minutes).
          - Repeated moderate offenses: "TIMEOUT_MEDIUM" (e.g., 1 hour).
          - Multiple/severe offenses: "TIMEOUT_LONG" (e.g., 1 day), "KICK", or "BAN".
-       Severity Overrides:
-         - Rule 5 or 5A (Pedophilia, IRL Porn): ALWAYS "BAN".
-         - Rule 4 (AI Porn) or Rule 1 (Explicit content in wrong channel): Minimum "DELETE". Escalate to TIMEOUTS/KICK/BAN based on history or severity.
-         - Rule 2/3 (Disrespect/Discrimination): "WARN" or "DELETE" for first/minor. Escalate to TIMEOUTS/KICK/BAN for repeated/severe. Explicit slurs are more severe.
+       Rule Severity Guidelines (use your judgment):
+         - Consider the severity of each rule violation on its own merits.
+         - Consider the user's history of past infractions when determining appropriate action.
+         - Consider the context of the message and channel when evaluating violations.
+         - You have full discretion to determine the most appropriate action for any violation.
        Suicidal Content:
          If the message content expresses **clear, direct, and serious suicidal ideation, intent, planning, or recent attempts** (e.g., 'I am going to end my life and have a plan', 'I survived my attempt last night', 'I wish I hadn't woken up after trying'), ALWAYS use "SUICIDAL" as the action, and set "violation" to true, with "rule_violated" as "Suicidal Content".
          For casual, edgy, hyperbolic, or ambiguous statements like 'imma kms', 'just kill me now', 'I want to die (lol)', or phrases that are clearly part of edgy humor/banter rather than a genuine cry for help, you should lean towards "IGNORE" or "NOTIFY_MODS" if there's slight ambiguity but no clear serious intent. **Do NOT flag 'imma kms' as "SUICIDAL" unless there is very strong supporting context indicating genuine, immediate, and serious intent.**
@@ -612,11 +613,6 @@ Now, analyze the provided message content based on the rules and instructions gi
         notification_embed.timestamp = discord.utils.utcnow() # Using discord.utils.utcnow() which is still supported
 
         action_taken_message = "" # To append to the notification
-
-        # --- Hardcoded Action Overrides (Crucial for Safety) ---
-        if rule_violated == "5A" or rule_violated == "5":
-            action = "BAN" # Force BAN for rule 5/5A regardless of AI suggestion
-            print(f"ALERT: Rule {rule_violated} violation detected. Overriding action to BAN.")
 
         # --- Perform Actions ---
         try:
@@ -863,11 +859,7 @@ Now, analyze the provided message content based on the rules and instructions gi
         if not message_content:
             return
 
-        # --- Rule 1 Context (NSFW Channel Check) ---
-        # Determine if the current channel is designated as NSFW
-        nsfw_channel_ids = get_guild_config(message.guild.id, "NSFW_CHANNEL_IDS", [])
-        is_nsfw_channel = message.channel.id in nsfw_channel_ids or \
-                          (hasattr(message.channel, 'is_nsfw') and message.channel.is_nsfw())
+        # NSFW channel check removed - AI will handle this context
 
         # --- Call AI for Analysis (Rules 1-5A, 7) ---
         if not OPENROUTER_API_KEY or OPENROUTER_API_KEY == "YOUR_OPENROUTER_API_KEY":
@@ -898,39 +890,8 @@ Now, analyze the provided message content based on the rules and instructions gi
 
         # Check if the AI flagged a violation
         if ai_decision.get("violation"):
-            rule_violated = ai_decision.get("rule_violated", "Unknown")
-
-            # --- Rule 1 Specific Handling (NSFW Content in Wrong Channel) ---
-            is_content_nsfw = rule_violated in ["1", "4", "5", "5A"] # Rules indicating potentially NSFW content
-
-            if is_content_nsfw and not is_nsfw_channel:
-                print(f"AI flagged NSFW content (Rule {rule_violated}) in NON-NSFW channel #{message.channel.name}. Overriding action if necessary.")
-                # Ensure severe action for severe content even if AI was lenient
-                if rule_violated in ["5", "5A"]:
-                    ai_decision["action"] = "BAN"
-                elif rule_violated == "4": # AI Porn
-                     ai_decision["action"] = "DELETE" # Ensure deletion at minimum
-                else: # General NSFW (Rule 1)
-                     ai_decision["action"] = "DELETE" # Ensure deletion for Rule 1 in wrong channel
-
-                # Proceed to handle the violation with potentially updated action
-                await self.handle_violation(message, ai_decision)
-
-            elif is_content_nsfw and is_nsfw_channel:
-                # Content is NSFW, but it's in an NSFW channel.
-                # ONLY take action if it violates Rules 4, 5, or 5A (AI/Illegal Porn)
-                if rule_violated in ["4", "5", "5A"]:
-                    print(f"AI flagged illegal/AI content (Rule {rule_violated}) within NSFW channel #{message.channel.name}. Proceeding with action.")
-                    await self.handle_violation(message, ai_decision)
-                else:
-                    # It's Rule 1 (General NSFW) in an NSFW channel - this is allowed by rules.
-                    print(f"AI flagged Rule 1 violation in designated NSFW channel #{message.channel.name}. Ignoring as per rules.")
-                    # Do nothing, even if AI suggested an action for Rule 1 here.
-
-            else:
-                # Violation is not NSFW-related (e.g., Rule 2, 3, 6) or occurred in appropriate channel
-                # Handle normally based on AI decision
-                await self.handle_violation(message, ai_decision)
+            # Handle the violation based on AI decision without overrides
+            await self.handle_violation(message, ai_decision)
         else:
             # AI found no violation
             print(f"AI analysis complete for message {message.id}. No violation detected.")
