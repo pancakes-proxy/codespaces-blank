@@ -1,116 +1,87 @@
 # moderation_cog.py
 import discord
 from discord.ext import commands
+from discord import app_commands
 import aiohttp # For making asynchronous HTTP requests
 import json
 import os # To load API key from environment variables
 
 # --- Configuration ---
 # Load the OpenRouter API key from the environment variable "AI_API_KEY"
-# Fallback to a placeholder if the environment variable is not set.
-OPENROUTER_API_KEY = os.getenv("AI_API_KEY", "YOUR_OPENROUTER_API_KEY")
-# OpenRouter API endpoint
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-# Choose a multimodal model from OpenRouter capable of processing text and images
-# Examples: 'openai/gpt-4o', 'google/gemini-pro-vision', 'anthropic/claude-3-opus-20240229'
-# Ensure the model you choose supports image URLs
-OPENROUTER_MODEL = "google/gemini-flash-1.5" # Make sure this model is available via your OpenRouter key
+OPENROUTER_API_KEY = os.getenv("AI_API_KEY")
+if not OPENROUTER_API_KEY:
+    raise ValueError("Error: AI_API_KEY environment variable is not set. The ModerationCog requires a valid API key to function.")
 
-# Discord Configuration
-MODERATOR_ROLE_ID = 1361031007536549979 # Role to ping for violations
-BOT_COMMANDS_CHANNEL_ID = [1360717341775630637, 1361038501902291135] # <#1360717341775630637>
-SUGGESTIONS_CHANNEL_ID = 1361752490210492489 # <#1361752490210492489>
-# Add the IDs of your designated NSFW channels here for Rule 1 check
-NSFW_CHANNEL_IDS = [1360708304187297844, 1360842650617647164, 1360842660213952713, 1360842670473216030, 1361081722426364006, 1360859057644245063, 1361892988539896029, 1365524778735239268, 1361097898799927437, 1361097565591961640, 1360842695806812180, 1361097983097049210] # Example: [123456789012345678, 987654321098765432]
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODEL = "google/gemini-2.5-flash-preview" # Make sure this model is available via your OpenRouter key
+
+# --- Per-Guild Discord Configuration ---
+GUILD_CONFIG_DIR = "/home/server/wdiscordbot-json-data"
+GUILD_CONFIG_PATH = os.path.join(GUILD_CONFIG_DIR, "guild_config.json")
+os.makedirs(GUILD_CONFIG_DIR, exist_ok=True)
+if not os.path.exists(GUILD_CONFIG_PATH):
+    with open(GUILD_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f)
+try:
+    with open(GUILD_CONFIG_PATH, "r", encoding="utf-8") as f:
+        GUILD_CONFIG = json.load(f)
+except Exception as e:
+    print(f"Failed to load per-guild config from {GUILD_CONFIG_PATH}: {e}")
+    GUILD_CONFIG = {}
+
+def save_guild_config():
+    try:
+        os.makedirs(os.path.dirname(GUILD_CONFIG_PATH), exist_ok=True)
+        if not os.path.exists(GUILD_CONFIG_PATH):
+            with open(GUILD_CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump({}, f)
+        with open(GUILD_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(GUILD_CONFIG, f, indent=2)
+    except Exception as e:
+        print(f"Failed to save per-guild config: {e}")
+
+def get_guild_config(guild_id: int, key: str, default=None):
+    guild_str = str(guild_id)
+    if guild_str in GUILD_CONFIG and key in GUILD_CONFIG[guild_str]:
+        return GUILD_CONFIG[guild_str][key]
+    return default
+
+def set_guild_config(guild_id: int, key: str, value):
+    guild_str = str(guild_id)
+    if guild_str not in GUILD_CONFIG:
+        GUILD_CONFIG[guild_str] = {}
+    GUILD_CONFIG[guild_str][key] = value
+    save_guild_config()
 
 # Server rules to provide context to the AI
 SERVER_RULES = """
 # Server Rules
-1. Keep NSFW stuff in NSFW channels. No full-on porn or explicit images outside of those spaces. Emojis and jokes are fine.
-2. Be respectful. No harassment, hate, or bullying.
-3. No discrimination. This includes gender identity, sexual orientation, race, etc.
-4. No AI-generated porn.
-5. No pedophilia.
-(5A: no IRL porn (for this ban the user and delete the message))
-6. Use the right channels. Bot commands go in <#1360717341775630637>, unless it’s part of a bot game or event.
-7. Suggestions are welcome! Drop them in <#1361752490210492489> if you’ve got any ideas.
+
+- Keep NSFW stuff in NSFW channels. No full-on porn or explicit images outside of those spaces. Emojis, jokes and stickers are fine
+- No real life pornography.
+- Be respectful. No harassment, hate, or bullying, unless its clearly a lighthearted joke.
+- No discrimination. This includes gender identity, sexual orientation, race, etc.
+- No AI-generated porn.
+- No pedophilia. This includes lolicon/shotacon.
+- Use the right channels. Bot commands go in <#1360717341775630637>, unless it's part of a bot game or event.
+- Suggestions are welcome! Drop them in <#1361752490210492489> if you've got any ideas.
 
 If someone breaks the rules, ping <@&1361031007536549979>.
 """
-
-# --- Suicidal Content Detection Configuration ---
-SUICIDAL_KEYWORDS = [
-    "suicide", "kill myself", "end my life", "unalive myself", "want to die",
-    "can't go on", "hopeless", "worthless", "burden", "self-harm", "cut myself",
-    "hang myself", "jump off", "shoot myself", "overdose", "pills", "rope",
-    "bridge", "gun", "razor", "blade", "slit wrists", "dieing", "kms", "iwtd",
-    "depressed", "anxious", "sad", "lonely", "empty", "numb", "pain", "suffering",
-    "struggling", "help me", "i need help", "i'm not okay", "i can't take it anymore",
-    "what's the point", "nothing matters", "i give up", "i'm done", "goodbye world",
-    "final message", "last words", "ending it all", "checking out", "fade away",
-    "disappear", "not here anymore", "better off dead", "wish i wasn't here",
-    "can't handle this", "too much to bear", "breaking point", "losing control",
-    "darkness", "void", "abyss", "trapped", "stuck", "no way out", "can't escape",
-    "drowning", "suffocating", "choking", "can't breathe", "heavy heart", "aching soul",
-    "broken spirit", "shattered", "crushed", "defeated", "overwhelmed", "exhausted",
-    "tired of living", "ready to leave", "peace at last", "eternal rest", "sleep forever",
-    "release", "escape", "freedom", "relief", "end it", "finish it", "stop the pain",
-    "make it stop", "can't feel anything", "wish I could disappear", "ghost", "invisible",
-    "unseen", "unheard", "ignored", "forgotten", "alone", "isolated", "abandoned",
-    "rejected", "failed", "failure", "mistake", "regret", "shame", "guilt", "blame",
-    "fault", "punishment", "deserve to die", "shouldn't be alive", "waste of space",
-    "nuisance", "problem", "burden", "drain", "leech", "parasite", "useless", "pointless",
-    "meaningless", "insignificant", "irrelevant", "invisible", "transparent", "hollow",
-    "empty shell", "robot", "zombie", "automaton", "puppet", "slave", "prisoner", "captive",
-    "chained", "bound", "restricted", "limited", "confined", "trapped", "cornered",
-    "at bay", "backed into a corner", "wall", "dead end", "no exit", "cul-de-sac",
-    "maze", "labyrinth", "tangle", "knot", "snare", "trap", "pitfall", "quicksand",
-    "swamp", "mire", "bog", "mud", "dirt", "dust", "ashes", "ruin", "wreckage",
-    "debris", "fragments", "shards", "splinters", "pieces", "bits", "scraps", "remnants",
-    "leftovers", "residue", "dregs", "sediment", "sludge", "goo", "muck", "grime",
-    "filth", "dirt", "stain", "blemish", "scar", "wound", "bruise", "cut", "gash",
-    "laceration", "puncture", "stab", "shot", "blast", "explosion", "fire", "flame",
-    "burn", "scald", "freeze", "frostbite", "hypothermia", "heatstroke", "sunstroke",
-    "drowning", "suffocation", "asphyxiation", "strangulation", "choking", "poison",
-    "venom", "toxin", "drug", "alcohol", "overdose", "suicide attempt", "failed attempt",
-    "survivor", "recovery", "healing", "hope", "light", "future", "tomorrow", "change",
-    "support", "help", "resources", "talk", "share", "listen", "understand", "care",
-    "love", "friendship", "family", "community", "strength", "courage", "resilience",
-    "fight", "survive", "live", "breathe", "exist", "be", "am", "is", "are", "was",
-    "were", "will be", "can be", "could be", "should be", "would be", "might be",
-    "may be", "must be", "have been", "has been", "had been", "will have been",
-    "can have been", "could have been", "should have been", "would have been",
-    "might have been", "may have been", "must have been", "being", "been", "to be",
-    "not to be", "that is the question", "whether 'tis nobler in the mind to suffer",
-    "the slings and arrows of outrageous fortune", "or to take arms against a sea of troubles",
-    "and by opposing end them", "to die", "to sleep", "no more", "and by a sleep to say we end",
-    "the heart-ache and the thousand natural shocks", "that flesh is heir to", "'tis a consummation",
-    "devoutly to be wish'd", "to die", "to sleep", "to sleep", "perchance to dream", "ay",
-    "there's the rub", "for in that sleep of death what dreams may come", "when we have shuffled off this mortal coil",
-    "must give us pause", "there's the respect", "that makes calamity of so long life",
-    "for who would bear the whips and scorns of time", "the oppressor's wrong", "the proud man's contumely",
-    "the pangs of despis'd love", "the law's delay", "the insolence of office", "and the spurns",
-    "that patient merit of the unworthy takes", "when he himself might his quietus make",
-    "with a bare bodkin", "who would fardels bear", "to grunt and sweat under a weary life",
-    "but that the dread of something after death", "the undiscover'd country from whose bourn",
-    "no traveller returns", "puzzles the will", "and makes us rather bear those ills we have",
-    "than fly to others that we know not of", "thus conscience does make cowards of us all",
-    "and thus the native hue of resolution", "is sicklied o'er with the pale cast of thought",
-    "and enterprises of great pith and moment", "with this regard their currents turn awry",
-    "and lose the name of action", "soft you now", "the fair Ophelia", "nymph", "in thy orisons",
-    "be all my sins remember'd"
-] # Add more keywords as needed
-
 SUICIDAL_HELP_RESOURCES = """
-It sounds like you might be going through a difficult time. Please consider reaching out for help. Here are some resources that can provide support:
+Hey, I'm really concerned to hear you're feeling this way. Please know that you're not alone and there are people who want to support you.
+Your well-being is important to us on this server.
 
-**Crisis Text Line:** Text HOME to 741741 from anywhere in the US, anytime, about any type of crisis.
-**The National Suicide Prevention Lifeline:** 988
-**The Trevor Project:** 1-866-488-7386 (for LGBTQ youth)
-**The Jed Foundation:** https://www.jedfoundation.org/
-**The Crisis Prevention and Response Center:** https://www.crisistextline.org/
+Here are some immediate resources that can offer help right now:
 
-Remember, you are not alone and help is available.
+- **National Crisis and Suicide Lifeline (US):** Call or text **988**. This is available 24/7, free, and confidential.
+- **Crisis Text Line (US):** Text **HOME** to **741741**. This is also a 24/7 free crisis counseling service.
+- **The Trevor Project (for LGBTQ youth):** Call **1-866-488-7386** or visit their website for chat/text options: <https://www.thetrevorproject.org/get-help/>
+- **The Jed Foundation (Mental Health Resource Center):** Provides resources for teens and young adults: <https://www.jedfoundation.org/>
+- **Find A Helpline (International):** If you're outside the US, this site can help you find resources in your country: <https://findahelpline.com/>
+
+Please reach out to one of these. We've also alerted our server's support team so they are aware and can offer a listening ear or further guidance if you're comfortable.
+You matter, and help is available.
 """
 
 class ModerationCog(commands.Cog):
@@ -138,6 +109,69 @@ class ModerationCog(commands.Cog):
         """Clean up the session when the cog is unloaded."""
         await self.session.close()
         print("ModerationCog Unloaded, session closed.")
+
+    MOD_KEYS = [
+        "MOD_LOG_CHANNEL_ID",
+        "MODERATOR_ROLE_ID",
+        "SUICIDAL_PING_ROLE_ID",
+        "BOT_COMMANDS_CHANNEL_ID",
+        "SUGGESTIONS_CHANNEL_ID",
+        "NSFW_CHANNEL_IDS",
+    ]
+
+    async def modset_key_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str
+    ):
+        return [
+            app_commands.Choice(name=k, value=k)
+            for k in self.MOD_KEYS if current.lower() in k.lower()
+        ]
+
+    @app_commands.command(name="modset", description="Set a moderation config value for this guild (admin only).")
+    @app_commands.describe(key="Config key", value="Value (int, comma-separated list, or string)")
+    @app_commands.autocomplete(key=modset_key_autocomplete)
+    async def modset(
+        self,
+        interaction: discord.Interaction,
+        key: str,
+        value: str
+    ):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=False)
+            return
+        if key not in self.MOD_KEYS:
+            await interaction.response.send_message(f"Invalid key. Choose from: {', '.join(self.MOD_KEYS)}", ephemeral=False)
+            return
+        guild_id = interaction.guild.id
+        # Try to parse value as int, list of ints, or fallback to string
+        parsed_value = value
+        if "," in value:
+            try:
+                parsed_value = [int(v.strip()) for v in value.split(",")]
+            except Exception:
+                parsed_value = [v.strip() for v in value.split(",")]
+        else:
+            try:
+                parsed_value = int(value)
+            except Exception:
+                pass
+        set_guild_config(guild_id, key, parsed_value)
+        await interaction.response.send_message(f"Set `{key}` to `{parsed_value}` for this guild.", ephemeral=False)
+
+    @app_commands.command(name="modenable", description="Enable or disable moderation for this guild (admin only).")
+    @app_commands.describe(enabled="Enable moderation (true/false)")
+    async def modenable(self, interaction: discord.Interaction, enabled: bool):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=False)
+            return
+        set_guild_config(interaction.guild.id, "ENABLED", enabled)
+        await interaction.response.send_message(f"Moderation is now {'enabled' if enabled else 'disabled'} for this guild.", ephemeral=False)
+
+    async def setup_hook(self):
+        self.bot.tree.add_command(self.modset)
+        self.bot.tree.add_command(self.modenable)
 
     async def query_openrouter(self, message: discord.Message, message_content: str, image_urls: list[str]):
         """
@@ -182,12 +216,15 @@ Message Details:
 
 Instructions:
 1. Review the text content AND any provided image URLs against EACH rule.
-2. Determine if ANY rule is violated. Pay EXTREME attention to rules 5 (Pedophilia) and 5A (IRL Porn). Rule 5A violation requires immediate BAN action. Rule 4 (AI Porn) and Rule 1 (NSFW outside designated channels) are also important.
+2. Determine if ANY rule is violated. When evaluating, consider the server's culture where edgy/sexual jokes are common:
+   - For general disrespectful behavior, harassment, or bullying (Rule 2 & 3): Only flag a violation if the intent appears **genuinely malicious or serious**, not just an edgy/sexual joke.
+   - For **explicit slurs or severe discriminatory language** (Rule 3): These are violations **regardless of joking intent**.
+After considering the above, pay EXTREME attention to rules 5 (Pedophilia) and 5A (IRL Porn) – these are always severe. Rule 4 (AI Porn) and Rule 1 (NSFW in wrong channel) are also critical. Prioritize these severe violations.
 3. Respond ONLY with a single JSON object containing the following keys:
     - "violation": boolean (true if any rule is violated, false otherwise)
     - "rule_violated": string (The number of the rule violated, e.g., "1", "5A", "None". If multiple rules are violated, state the MOST SEVERE one, prioritizing 5A > 5 > 4 > 3 > 2 > 1 > 6).
     - "reasoning": string (A concise explanation for your decision, referencing the specific rule and content).
-    - "action": string (Suggest ONE action based on the violation severity: "IGNORE", "WARN", "DELETE", "BAN", "NOTIFY_MODS". Mandatory "BAN" for rule 5A or 5. "DELETE" for rule 4 or rule 1 in wrong channel. "WARN" or "DELETE" for 2, 3. "NOTIFY_MODS" if unsure but suspicious).
+    - "action": string (Suggest ONE action: "IGNORE", "WARN", "DELETE", "BAN", "NOTIFY_MODS", "SUICIDAL". If the message content strongly indicates suicidal ideation or intent, ALWAYS use "SUICIDAL" as the action, and set "violation" to true, with "rule_violated" as "N/A" or "Suicidal Content". Otherwise, for rule violations: Mandatory "BAN" for rule 5A or 5. "DELETE" for rule 4 or rule 1 in wrong channel. "WARN" or "DELETE" for 2, 3. "NOTIFY_MODS" if unsure but suspicious).
 
 "this is a note some messages are getting flagged for no reason please note that if there is a NSFW image with a character in it that has red hair that is 31 year old kasane teto so stop fucking flagging it you pmo
 Example Response (Violation):
@@ -204,6 +241,14 @@ Example Response (No Violation):
   "rule_violated": "None",
   "reasoning": "The message is a respectful discussion and contains no prohibited content or images.",
   "action": "IGNORE"
+}}
+
+Example Response (Suicidal Content):
+{{
+  "violation": true,
+  "rule_violated": "Suicidal Content",
+  "reasoning": "The user's message 'I want to end my life' indicates clear suicidal intent.",
+  "action": "SUICIDAL"
 }}
 
 Now, analyze the provided message content and images:
@@ -314,13 +359,56 @@ Now, analyze the provided message content and images:
     async def handle_violation(self, message: discord.Message, ai_decision: dict):
         """
         Takes action based on the AI's violation decision.
+        Also transmits action info via HTTP POST with API key header.
         """
+        import datetime
+        import aiohttp
+
         rule_violated = ai_decision.get("rule_violated", "Unknown")
         reasoning = ai_decision.get("reasoning", "No reasoning provided.")
         action = ai_decision.get("action", "NOTIFY_MODS").upper() # Default to notify mods
 
-        moderator_role = message.guild.get_role(MODERATOR_ROLE_ID)
-        mod_ping = moderator_role.mention if moderator_role else f"Moderators (Role ID {MODERATOR_ROLE_ID} not found)"
+        moderator_role_id = get_guild_config(message.guild.id, "MODERATOR_ROLE_ID")
+        moderator_role = message.guild.get_role(moderator_role_id) if moderator_role_id else None
+        mod_ping = moderator_role.mention if moderator_role else f"Moderators (Role ID {moderator_role_id} not found)"
+
+        # --- Transmit action info over HTTP POST ---
+        try:
+            mod_log_api_secret = os.getenv("MOD_LOG_API_SECRET")
+            if mod_log_api_secret:
+                guild_id = message.guild.id
+                post_url = f"https://slipstreamm.dev/dashboard/api/guilds/{guild_id}/ai-moderation-action"
+                payload = {
+                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                    "guild_id": guild_id,
+                    "guild_name": message.guild.name,
+                    "channel_id": message.channel.id,
+                    "channel_name": message.channel.name,
+                    "message_id": message.id,
+                    "message_link": message.jump_url,
+                    "user_id": message.author.id,
+                    "user_name": str(message.author),
+                    "action": action,
+                    "rule_violated": rule_violated,
+                    "reasoning": reasoning,
+                    "violation": ai_decision.get("violation", False),
+                    "message_content": message.content[:1024] if message.content else "",
+                    "full_message_content": message.content if message.content else "",
+                    "attachments": [a.url for a in message.attachments] if message.attachments else [],
+                    "ai_model": OPENROUTER_MODEL,
+                    "result": "pending"
+                }
+                headers = {
+                    "Authorization": f"Bearer {mod_log_api_secret}",
+                    "Content-Type": "application/json"
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(post_url, headers=headers, json=payload, timeout=10) as resp:
+                        payload["result"] = "success" if resp.status < 400 else f"error:{resp.status}"
+            else:
+                print("MOD_LOG_API_SECRET not set; skipping action POST.")
+        except Exception as e:
+            print(f"Failed to POST action info: {e}")
 
         # --- Prepare Notification ---
         notification_embed = discord.Embed(
@@ -334,6 +422,12 @@ Now, analyze the provided message content and images:
         notification_embed.add_field(name="AI Suggested Action", value=f"`{action}`", inline=True)
         notification_embed.add_field(name="AI Reasoning", value=f"_{reasoning}_", inline=False)
         notification_embed.add_field(name="Message Link", value=f"[Jump to Message]({message.jump_url})", inline=False)
+        # Log message content and attachments for audit purposes
+        msg_content = message.content if message.content else "*No text content*"
+        notification_embed.add_field(name="Message Content", value=msg_content[:1024], inline=False)
+        if message.attachments:
+            attachment_urls = "\n".join(a.url for a in message.attachments)
+            notification_embed.add_field(name="Attachments", value=attachment_urls[:1024], inline=False)
         notification_embed.set_footer(text=f"AI Model: {OPENROUTER_MODEL}")
         notification_embed.timestamp = discord.utils.utcnow()
 
@@ -395,6 +489,26 @@ Now, analyze the provided message content and images:
                 notification_embed.color = discord.Color.gold()
                 print(f"Notifying moderators about potential violation (Rule {rule_violated}) by {message.author}.")
 
+            elif action == "SUICIDAL":
+                action_taken_message = "Action Taken: **User DMed resources, relevant role notified.**"
+                notification_embed.title = "🚨 Suicidal Content Detected 🚨"
+                notification_embed.color = discord.Color.dark_purple() # A distinct color
+                notification_embed.description = "AI analysis detected content indicating potential suicidal ideation."
+                print(f"SUICIDAL content detected from {message.author}. DMing resources and notifying role.")
+                # DM the user with help resources
+                try:
+                    dm_channel = await message.author.create_dm()
+                    await dm_channel.send(SUICIDAL_HELP_RESOURCES)
+                    action_taken_message += " User successfully DMed."
+                except discord.Forbidden:
+                    print(f"Could not DM suicidal help resources to {message.author} (DMs likely disabled).")
+                    action_taken_message += " (Could not DM user - DMs disabled)."
+                except Exception as e:
+                    print(f"Error sending suicidal help resources DM to {message.author}: {e}")
+                    action_taken_message += f" (Error DMing user: {e})."
+                # The message itself is usually not deleted for suicidal content, to allow for intervention.
+                # If deletion is desired, add: await message.delete() here.
+
             else: # Includes "IGNORE" or unexpected actions
                 if ai_decision.get("violation"): # If violation is true but action is IGNORE
                      action_taken_message = "Action Taken: **None** (AI suggested IGNORE despite flagging violation - Review Recommended)."
@@ -405,19 +519,29 @@ Now, analyze the provided message content and images:
                     print(f"No action taken for message by {message.author} (AI Action: {action}, Violation: False)")
                     return # Don't notify if no violation and action is IGNORE
 
-            # --- Send Notification to Moderators ---
-            if moderator_role:
-                # Find a channel to send the notification (e.g., a dedicated mod-log channel)
-                # For simplicity, sending to the channel where violation occurred, but pinging role.
-                # Consider creating a dedicated mod log channel and sending there instead.
-                log_channel = message.channel # Or replace with: self.bot.get_channel(YOUR_MOD_LOG_CHANNEL_ID)
-                if log_channel:
-                    final_message = f"{mod_ping}\n{action_taken_message}"
-                    await log_channel.send(content=final_message, embed=notification_embed)
-                else:
-                    print(f"ERROR: Could not find channel {message.channel.id} to send mod notification.")
-            else:
-                print(f"ERROR: Moderator role ID {MODERATOR_ROLE_ID} not found.")
+            # --- Send Notification to Moderators/Relevant Role ---
+            log_channel_id = get_guild_config(message.guild.id, "MOD_LOG_CHANNEL_ID")
+            log_channel = self.bot.get_channel(log_channel_id) if log_channel_id else None
+            if not log_channel:
+                print(f"ERROR: Moderation log channel (ID: {log_channel_id}) not found or not configured. Defaulting to message channel.")
+                log_channel = message.channel
+                if not log_channel:
+                    print(f"ERROR: Could not find even the original message channel {message.channel.id} to send notification.")
+                    return
+
+            if action == "SUICIDAL":
+                suicidal_role_id = get_guild_config(message.guild.id, "SUICIDAL_PING_ROLE_ID")
+                suicidal_role = message.guild.get_role(suicidal_role_id) if suicidal_role_id else None
+                ping_target = suicidal_role.mention if suicidal_role else f"Role ID {suicidal_role_id} (Suicidal Content)"
+                if not suicidal_role:
+                    print(f"ERROR: Suicidal ping role ID {suicidal_role_id} not found.")
+                final_message = f"{ping_target}\n{action_taken_message}"
+                await log_channel.send(content=final_message, embed=notification_embed)
+            elif moderator_role: # For other violations
+                final_message = f"{mod_ping}\n{action_taken_message}"
+                await log_channel.send(content=final_message, embed=notification_embed)
+            else: # Fallback if moderator role is also not found for non-suicidal actions
+                print(f"ERROR: Moderator role ID {moderator_role_id} not found for action {action}.")
 
 
         except discord.Forbidden as e:
@@ -461,48 +585,41 @@ Now, analyze the provided message content and images:
         # Ignore DMs
         if not message.guild:
             return
+        # Check if moderation is enabled for this guild
+        if not get_guild_config(message.guild.id, "ENABLED", True):
+            return
 
         # --- Suicidal Content Check ---
         message_content_lower = message.content.lower()
-        if any(keyword in message_content_lower for keyword in SUICIDAL_KEYWORDS):
-            try:
-                dm_channel = await message.author.create_dm()
-                await dm_channel.send(SUICIDAL_HELP_RESOURCES)
-                print(f"Sent suicidal help resources to user {message.author} via DM.")
-            except discord.Forbidden:
-                print(f"Could not DM suicidal help resources to {message.author} (DMs likely disabled).")
-            except Exception as e:
-                print(f"Error sending suicidal help resources DM to {message.author}: {e}")
-            # Optionally, you could add a flag here to skip further AI moderation for this message
-            # return # Uncomment this line if you want to stop processing after sending resources
+        # Suicidal keyword check removed; handled by OpenRouter AI moderation.
 
         # --- Rule 6 Check (Channel Usage - Basic) ---
         # Simple check for common bot command prefixes in wrong channels
         common_prefixes = ('!', '?', '.', '$', '%', '/', '-') # Add more if needed
         is_likely_bot_command = message.content.startswith(common_prefixes)
-        is_in_bot_commands_channel = message.channel.id == BOT_COMMANDS_CHANNEL_ID
-        # Also check if it's in the suggestions channel (Rule 7 context)
-        is_in_suggestions_channel = message.channel.id == SUGGESTIONS_CHANNEL_ID
+        bot_commands_channel_ids = get_guild_config(message.guild.id, "BOT_COMMANDS_CHANNEL_ID", [])
+        if isinstance(bot_commands_channel_ids, int):
+            bot_commands_channel_ids = [bot_commands_channel_ids]
+        is_in_bot_commands_channel = message.channel.id in bot_commands_channel_ids
+        suggestions_channel_id = get_guild_config(message.guild.id, "SUGGESTIONS_CHANNEL_ID")
+        is_in_suggestions_channel = message.channel.id == suggestions_channel_id
 
         # If it looks like a command AND it's NOT in the commands channel...
         if is_likely_bot_command and not is_in_bot_commands_channel:
-            # Add exceptions here if needed (e.g., specific channels where commands ARE allowed)
-            # if message.channel.id in [ALLOWED_COMMAND_CHANNELS]:
-            #     pass # Skip rule 6 check for these channels
-            # else:
-                try:
-                    await message.delete()
-                    warning = await message.channel.send(
-                        f"{message.author.mention}, please use bot commands only in <#{BOT_COMMANDS_CHANNEL_ID}> (Rule 6).",
-                        delete_after=20 # Delete the warning after 20 seconds
-                    )
-                    print(f"Deleted message from {message.author} in #{message.channel.name} for violating Rule 6 (Bot Command).")
-                    # Optionally log this to mods if it happens frequently
-                except discord.Forbidden:
-                    print(f"Missing permissions to delete message/send warning in #{message.channel.name} for Rule 6 violation.")
-                except discord.NotFound:
-                    print("Message already deleted (Rule 6 check).")
-                return # Stop further processing for this message
+            try:
+                await message.delete()
+                bot_commands_channel_id = bot_commands_channel_ids[0] if bot_commands_channel_ids else None
+                warning_channel_ref = f"<#{bot_commands_channel_id}>" if bot_commands_channel_id else "the correct channel"
+                warning = await message.channel.send(
+                    f"{message.author.mention}, please use bot commands only in {warning_channel_ref} (Rule 6).",
+                    delete_after=20 # Delete the warning after 20 seconds
+                )
+                print(f"Deleted message from {message.author} in #{message.channel.name} for violating Rule 6 (Bot Command).")
+            except discord.Forbidden:
+                print(f"Missing permissions to delete message/send warning in #{message.channel.name} for Rule 6 violation.")
+            except discord.NotFound:
+                print("Message already deleted (Rule 6 check).")
+            return # Stop further processing for this message
 
         # --- Prepare for AI Analysis ---
         message_content = message.content
@@ -518,7 +635,8 @@ Now, analyze the provided message content and images:
 
         # --- Rule 1 Context (NSFW Channel Check) ---
         # Determine if the current channel is designated as NSFW
-        is_nsfw_channel = message.channel.id in NSFW_CHANNEL_IDS or \
+        nsfw_channel_ids = get_guild_config(message.guild.id, "NSFW_CHANNEL_IDS", [])
+        is_nsfw_channel = message.channel.id in nsfw_channel_ids or \
                           (hasattr(message.channel, 'is_nsfw') and message.channel.is_nsfw())
 
         # --- Call AI for Analysis (Rules 1-5A, 7) ---
