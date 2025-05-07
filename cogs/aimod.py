@@ -16,7 +16,12 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL = "google/gemini-2.5-flash-preview" # Make sure this model is available via your OpenRouter key
 
 # --- Per-Guild Discord Configuration ---
-GUILD_CONFIG_PATH = "/home/server/wdiscordbot-json-data"
+GUILD_CONFIG_DIR = "/home/server/wdiscordbot-json-data"
+GUILD_CONFIG_PATH = os.path.join(GUILD_CONFIG_DIR, "guild_config.json")
+os.makedirs(GUILD_CONFIG_DIR, exist_ok=True)
+if not os.path.exists(GUILD_CONFIG_PATH):
+    with open(GUILD_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f)
 try:
     with open(GUILD_CONFIG_PATH, "r", encoding="utf-8") as f:
         GUILD_CONFIG = json.load(f)
@@ -26,6 +31,10 @@ except Exception as e:
 
 def save_guild_config():
     try:
+        os.makedirs(os.path.dirname(GUILD_CONFIG_PATH), exist_ok=True)
+        if not os.path.exists(GUILD_CONFIG_PATH):
+            with open(GUILD_CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump({}, f)
         with open(GUILD_CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(GUILD_CONFIG, f, indent=2)
     except Exception as e:
@@ -101,11 +110,39 @@ class ModerationCog(commands.Cog):
         await self.session.close()
         print("ModerationCog Unloaded, session closed.")
 
+    MOD_KEYS = [
+        "MOD_LOG_CHANNEL_ID",
+        "MODERATOR_ROLE_ID",
+        "SUICIDAL_PING_ROLE_ID",
+        "BOT_COMMANDS_CHANNEL_ID",
+        "SUGGESTIONS_CHANNEL_ID",
+        "NSFW_CHANNEL_IDS",
+    ]
+
+    async def modset_key_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str
+    ):
+        return [
+            app_commands.Choice(name=k, value=k)
+            for k in self.MOD_KEYS if current.lower() in k.lower()
+        ]
+
     @app_commands.command(name="modset", description="Set a moderation config value for this guild (admin only).")
-    @app_commands.describe(key="Config key (e.g. MOD_LOG_CHANNEL_ID)", value="Value (int, comma-separated list, or string)")
-    async def modset(self, interaction: discord.Interaction, key: str, value: str):
+    @app_commands.describe(key="Config key", value="Value (int, comma-separated list, or string)")
+    @app_commands.autocomplete(key=modset_key_autocomplete)
+    async def modset(
+        self,
+        interaction: discord.Interaction,
+        key: str,
+        value: str
+    ):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=False)
+            return
+        if key not in self.MOD_KEYS:
+            await interaction.response.send_message(f"Invalid key. Choose from: {', '.join(self.MOD_KEYS)}", ephemeral=False)
             return
         guild_id = interaction.guild.id
         # Try to parse value as int, list of ints, or fallback to string
@@ -121,16 +158,16 @@ class ModerationCog(commands.Cog):
             except Exception:
                 pass
         set_guild_config(guild_id, key, parsed_value)
-        await interaction.response.send_message(f"Set `{key}` to `{parsed_value}` for this guild.", ephemeral=True)
+        await interaction.response.send_message(f"Set `{key}` to `{parsed_value}` for this guild.", ephemeral=False)
 
     @app_commands.command(name="modenable", description="Enable or disable moderation for this guild (admin only).")
     @app_commands.describe(enabled="Enable moderation (true/false)")
     async def modenable(self, interaction: discord.Interaction, enabled: bool):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=True)
+            await interaction.response.send_message("You must be an administrator to use this command.", ephemeral=False)
             return
         set_guild_config(interaction.guild.id, "ENABLED", enabled)
-        await interaction.response.send_message(f"Moderation is now {'enabled' if enabled else 'disabled'} for this guild.", ephemeral=True)
+        await interaction.response.send_message(f"Moderation is now {'enabled' if enabled else 'disabled'} for this guild.", ephemeral=False)
 
     async def setup_hook(self):
         self.bot.tree.add_command(self.modset)
@@ -179,7 +216,10 @@ Message Details:
 
 Instructions:
 1. Review the text content AND any provided image URLs against EACH rule.
-2. Determine if ANY rule is violated. Pay EXTREME attention to rules 5 (Pedophilia) and 5A (IRL Porn). Rule 5A violation requires immediate BAN action. Rule 4 (AI Porn) and Rule 1 (NSFW outside designated channels) are also important.
+2. Determine if ANY rule is violated. When evaluating, consider the server's culture where edgy/sexual jokes are common:
+   - For general disrespectful behavior, harassment, or bullying (Rule 2 & 3): Only flag a violation if the intent appears **genuinely malicious or serious**, not just an edgy/sexual joke.
+   - For **explicit slurs or severe discriminatory language** (Rule 3): These are violations **regardless of joking intent**.
+After considering the above, pay EXTREME attention to rules 5 (Pedophilia) and 5A (IRL Porn) – these are always severe. Rule 4 (AI Porn) and Rule 1 (NSFW in wrong channel) are also critical. Prioritize these severe violations.
 3. Respond ONLY with a single JSON object containing the following keys:
     - "violation": boolean (true if any rule is violated, false otherwise)
     - "rule_violated": string (The number of the rule violated, e.g., "1", "5A", "None". If multiple rules are violated, state the MOST SEVERE one, prioritizing 5A > 5 > 4 > 3 > 2 > 1 > 6).
@@ -319,7 +359,11 @@ Now, analyze the provided message content and images:
     async def handle_violation(self, message: discord.Message, ai_decision: dict):
         """
         Takes action based on the AI's violation decision.
+        Also transmits action info via HTTP POST with API key header.
         """
+        import datetime
+        import aiohttp
+
         rule_violated = ai_decision.get("rule_violated", "Unknown")
         reasoning = ai_decision.get("reasoning", "No reasoning provided.")
         action = ai_decision.get("action", "NOTIFY_MODS").upper() # Default to notify mods
@@ -327,6 +371,44 @@ Now, analyze the provided message content and images:
         moderator_role_id = get_guild_config(message.guild.id, "MODERATOR_ROLE_ID")
         moderator_role = message.guild.get_role(moderator_role_id) if moderator_role_id else None
         mod_ping = moderator_role.mention if moderator_role else f"Moderators (Role ID {moderator_role_id} not found)"
+
+        # --- Transmit action info over HTTP POST ---
+        try:
+            mod_log_api_secret = os.getenv("MOD_LOG_API_SECRET")
+            if mod_log_api_secret:
+                guild_id = message.guild.id
+                post_url = f"https://slipstreamm.dev/dashboard/api/guilds/{guild_id}/ai-moderation-action"
+                payload = {
+                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                    "guild_id": guild_id,
+                    "guild_name": message.guild.name,
+                    "channel_id": message.channel.id,
+                    "channel_name": message.channel.name,
+                    "message_id": message.id,
+                    "message_link": message.jump_url,
+                    "user_id": message.author.id,
+                    "user_name": str(message.author),
+                    "action": action,
+                    "rule_violated": rule_violated,
+                    "reasoning": reasoning,
+                    "violation": ai_decision.get("violation", False),
+                    "message_content": message.content[:1024] if message.content else "",
+                    "full_message_content": message.content if message.content else "",
+                    "attachments": [a.url for a in message.attachments] if message.attachments else [],
+                    "ai_model": OPENROUTER_MODEL,
+                    "result": "pending"
+                }
+                headers = {
+                    "Authorization": f"Bearer {mod_log_api_secret}",
+                    "Content-Type": "application/json"
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(post_url, headers=headers, json=payload, timeout=10) as resp:
+                        payload["result"] = "success" if resp.status < 400 else f"error:{resp.status}"
+            else:
+                print("MOD_LOG_API_SECRET not set; skipping action POST.")
+        except Exception as e:
+            print(f"Failed to POST action info: {e}")
 
         # --- Prepare Notification ---
         notification_embed = discord.Embed(
