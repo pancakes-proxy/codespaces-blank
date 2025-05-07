@@ -16,9 +16,13 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL = "google/gemini-2.5-flash-preview" # Make sure this model is available via your OpenRouter key
 
 # --- Per-Guild Discord Configuration ---
-GUILD_CONFIG_DIR = "/home/server/wdiscordbot-json-data"
+GUILD_CONFIG_DIR = "/home/server/wdiscordbot-json-data" # Using the existing directory for all json data
 GUILD_CONFIG_PATH = os.path.join(GUILD_CONFIG_DIR, "guild_config.json")
+USER_INFRACTIONS_PATH = os.path.join(GUILD_CONFIG_DIR, "user_infractions.json")
+
 os.makedirs(GUILD_CONFIG_DIR, exist_ok=True)
+
+# Initialize Guild Config
 if not os.path.exists(GUILD_CONFIG_PATH):
     with open(GUILD_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump({}, f)
@@ -29,16 +33,38 @@ except Exception as e:
     print(f"Failed to load per-guild config from {GUILD_CONFIG_PATH}: {e}")
     GUILD_CONFIG = {}
 
+# Initialize User Infractions
+if not os.path.exists(USER_INFRACTIONS_PATH):
+    with open(USER_INFRACTIONS_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f) # Stores infractions as { "guild_id_user_id": [infraction_list] }
+try:
+    with open(USER_INFRACTIONS_PATH, "r", encoding="utf-8") as f:
+        USER_INFRACTIONS = json.load(f)
+except Exception as e:
+    print(f"Failed to load user infractions from {USER_INFRACTIONS_PATH}: {e}")
+    USER_INFRACTIONS = {}
+
 def save_guild_config():
     try:
-        os.makedirs(os.path.dirname(GUILD_CONFIG_PATH), exist_ok=True)
-        if not os.path.exists(GUILD_CONFIG_PATH):
-            with open(GUILD_CONFIG_PATH, "w", encoding="utf-8") as f:
-                json.dump({}, f)
+        # os.makedirs(os.path.dirname(GUILD_CONFIG_PATH), exist_ok=True) # Already created by GUILD_CONFIG_DIR
+        # if not os.path.exists(GUILD_CONFIG_PATH): # Redundant check, file is created if not exists
+        #     with open(GUILD_CONFIG_PATH, "w", encoding="utf-8") as f:
+        #         json.dump({}, f)
         with open(GUILD_CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(GUILD_CONFIG, f, indent=2)
     except Exception as e:
         print(f"Failed to save per-guild config: {e}")
+
+def save_user_infractions():
+    try:
+        # os.makedirs(os.path.dirname(USER_INFRACTIONS_PATH), exist_ok=True) # Already created by GUILD_CONFIG_DIR
+        # if not os.path.exists(USER_INFRACTIONS_PATH): # Redundant check
+        #     with open(USER_INFRACTIONS_PATH, "w", encoding="utf-8") as f:
+        #         json.dump({}, f)
+        with open(USER_INFRACTIONS_PATH, "w", encoding="utf-8") as f:
+            json.dump(USER_INFRACTIONS, f, indent=2)
+    except Exception as e:
+        print(f"Failed to save user infractions: {e}")
 
 def get_guild_config(guild_id: int, key: str, default=None):
     guild_str = str(guild_id)
@@ -52,6 +78,28 @@ def set_guild_config(guild_id: int, key: str, value):
         GUILD_CONFIG[guild_str] = {}
     GUILD_CONFIG[guild_str][key] = value
     save_guild_config()
+
+def get_user_infraction_history(guild_id: int, user_id: int) -> list:
+    """Retrieves a list of past infractions for a specific user in a guild."""
+    key = f"{guild_id}_{user_id}"
+    return USER_INFRACTIONS.get(key, [])
+
+def add_user_infraction(guild_id: int, user_id: int, rule_violated: str, action_taken: str, reasoning: str, timestamp: str):
+    """Adds a new infraction record for a user."""
+    key = f"{guild_id}_{user_id}"
+    if key not in USER_INFRACTIONS:
+        USER_INFRACTIONS[key] = []
+    
+    infraction_record = {
+        "timestamp": timestamp,
+        "rule_violated": rule_violated,
+        "action_taken": action_taken,
+        "reasoning": reasoning
+    }
+    USER_INFRACTIONS[key].append(infraction_record)
+    # Keep only the last N infractions to prevent the file from growing too large, e.g., last 10
+    USER_INFRACTIONS[key] = USER_INFRACTIONS[key][-10:] 
+    save_user_infractions()
 
 # Server rules to provide context to the AI
 SERVER_RULES = """
@@ -173,14 +221,15 @@ class ModerationCog(commands.Cog):
         self.bot.tree.add_command(self.modset)
         self.bot.tree.add_command(self.modenable)
 
-    async def query_openrouter(self, message: discord.Message, message_content: str, image_urls: list[str]):
+    async def query_openrouter(self, message: discord.Message, message_content: str, image_urls: list[str], user_history: str):
         """
-        Sends the message content and image URLs to the OpenRouter API for analysis.
+        Sends the message content, image URLs, and user history to the OpenRouter API for analysis.
 
         Args:
             message: The original discord.Message object.
             message_content: The text content of the message.
             image_urls: A list of URLs for images attached to the message.
+            user_history: A string summarizing the user's past infractions.
 
         Returns:
             A dictionary containing the AI's decision, or None if an error occurs.
@@ -198,35 +247,45 @@ class ModerationCog(commands.Cog):
             return None
 
         # Construct the prompt for the AI model
-        prompt_messages = []
-        prompt_content_list = [
-            {
-                "type": "text",
-                "text": f"""You are an AI moderation assistant for a Discord server. Analyze the following message content and any attached images based STRICTLY on the server rules provided below.
+        system_prompt_text = f"""You are an AI moderation assistant for a Discord server.
+Your primary function is to analyze message content and any attached images based STRICTLY on the server rules provided below.
 
 Server Rules:
 ---
 {SERVER_RULES}
 ---
 
-Message Details:
-- Author: {message.author.name} (ID: {message.author.id})
-- Channel: #{message.channel.name} (ID: {message.channel.id})
-- Message Content: "{message_content}"
-
 Instructions:
 1. Review the text content AND any provided image URLs against EACH rule.
 2. Determine if ANY rule is violated. When evaluating, consider the server's culture where edgy/sexual jokes are common:
+   - For Rule 1 (NSFW content): Remember that the server rules state "Emojis, jokes and stickers are fine" outside NSFW channels. Only flag a Rule 1 violation for text or images if it's **explicitly pornographic or full-on explicit imagery/text**, not just suggestive emojis (like `:blowme:`), stickers, or lighthearted sexual jokes. These lighter elements are generally permissible.
    - For general disrespectful behavior, harassment, or bullying (Rule 2 & 3): Only flag a violation if the intent appears **genuinely malicious or serious**, not just an edgy/sexual joke.
    - For **explicit slurs or severe discriminatory language** (Rule 3): These are violations **regardless of joking intent**.
-After considering the above, pay EXTREME attention to rules 5 (Pedophilia) and 5A (IRL Porn) – these are always severe. Rule 4 (AI Porn) and Rule 1 (NSFW in wrong channel) are also critical. Prioritize these severe violations.
+After considering the above, pay EXTREME attention to rules 5 (Pedophilia) and 5A (IRL Porn) – these are always severe. Rule 4 (AI Porn) is also critical. Prioritize these severe violations.
 3. Respond ONLY with a single JSON object containing the following keys:
     - "violation": boolean (true if any rule is violated, false otherwise)
     - "rule_violated": string (The number of the rule violated, e.g., "1", "5A", "None". If multiple rules are violated, state the MOST SEVERE one, prioritizing 5A > 5 > 4 > 3 > 2 > 1 > 6).
     - "reasoning": string (A concise explanation for your decision, referencing the specific rule and content).
-    - "action": string (Suggest ONE action: "IGNORE", "WARN", "DELETE", "BAN", "NOTIFY_MODS", "SUICIDAL". If the message content strongly indicates suicidal ideation or intent, ALWAYS use "SUICIDAL" as the action, and set "violation" to true, with "rule_violated" as "N/A" or "Suicidal Content". Otherwise, for rule violations: Mandatory "BAN" for rule 5A or 5. "DELETE" for rule 4 or rule 1 in wrong channel. "WARN" or "DELETE" for 2, 3. "NOTIFY_MODS" if unsure but suspicious).
+    - "action": string (Suggest ONE action from: "IGNORE", "WARN", "DELETE", "TIMEOUT_SHORT", "TIMEOUT_MEDIUM", "TIMEOUT_LONG", "KICK", "BAN", "NOTIFY_MODS", "SUICIDAL".
+       Consider the user's infraction history. If the user has prior infractions for similar or escalating behavior, suggest a more severe action than if it were a first-time offense for a minor rule.
+       Progressive Discipline Guide (unless overridden by severity):
+         - First minor offense: "WARN" (and "DELETE" if content is removable like Rule 1/4).
+         - Second minor offense / First moderate offense: "TIMEOUT_SHORT" (e.g., 10 minutes).
+         - Repeated moderate offenses: "TIMEOUT_MEDIUM" (e.g., 1 hour).
+         - Multiple/severe offenses: "TIMEOUT_LONG" (e.g., 1 day), "KICK", or "BAN".
+       Severity Overrides:
+         - Rule 5 or 5A (Pedophilia, IRL Porn): ALWAYS "BAN".
+         - Rule 4 (AI Porn) or Rule 1 (Explicit content in wrong channel): Minimum "DELETE". Escalate to TIMEOUTS/KICK/BAN based on history or severity.
+         - Rule 2/3 (Disrespect/Discrimination): "WARN" or "DELETE" for first/minor. Escalate to TIMEOUTS/KICK/BAN for repeated/severe. Explicit slurs are more severe.
+       Suicidal Content:
+         If the message content expresses **clear, direct, and serious suicidal ideation, intent, planning, or recent attempts** (e.g., 'I am going to end my life and have a plan', 'I survived my attempt last night'), ALWAYS use "SUICIDAL" as the action, and set "violation" to true, with "rule_violated" as "Suicidal Content".
+         For casual, edgy, or ambiguous statements like 'imma kms' that lack clear serious intent, consider "NOTIFY_MODS" or "IGNORE".
+       If unsure but suspicious, or if the situation is complex: "NOTIFY_MODS".
+       Default action for minor first-time rule violations should be "WARN" or "DELETE" (if applicable).
+       Do not suggest "KICK" or "BAN" lightly; reserve for severe or repeated major offenses.
+       Timeout durations: TIMEOUT_SHORT (approx 10 mins), TIMEOUT_MEDIUM (approx 1 hour), TIMEOUT_LONG (approx 1 day to 1 week).
+       The system will handle the exact timeout duration; you just suggest the category.)
 
-"this is a note some messages are getting flagged for no reason please note that if there is a NSFW image with a character in it that has red hair that is 31 year old kasane teto so stop fucking flagging it you pmo
 Example Response (Violation):
 {{
   "violation": true,
@@ -250,21 +309,34 @@ Example Response (Suicidal Content):
   "reasoning": "The user's message 'I want to end my life' indicates clear suicidal intent.",
   "action": "SUICIDAL"
 }}
+"""
 
-Now, analyze the provided message content and images:
+        user_prompt_content_list = [
+            {
+                "type": "text",
+                "text": f"""User Infraction History (for {message.author.name}, ID: {message.author.id}):
+---
+{user_history if user_history else "No prior infractions recorded for this user in this guild."}
+---
+
+Message Details:
+- Author: {message.author.name} (ID: {message.author.id})
+- Channel: #{message.channel.name} (ID: {message.channel.id})
+- Message Content: "{message_content}"
+
+Now, analyze the provided message content and images based on the rules and instructions given in the system prompt:
 """
             }
         ]
 
-        # Add image URLs to the prompt content list if any exist
+        # Add image URLs to the user prompt content list if any exist
         if image_urls:
-            prompt_content_list.append({
+            user_prompt_content_list.append({
                 "type": "text",
-                "text": "Attached Image URLs to analyze:"
+                "text": "Images included with this prompt were part of the user's message."
             })
             for url in image_urls:
-                # Ensure the model supports the "image_url" type structure
-                prompt_content_list.append({
+                user_prompt_content_list.append({
                     "type": "image_url",
                     "image_url": {
                         "url": url,
@@ -284,11 +356,10 @@ Now, analyze the provided message content and images:
         payload = {
             "model": OPENROUTER_MODEL,
             "messages": [
-                # You can add a system prompt here if desired
-                # {"role": "system", "content": "You are a helpful Discord moderation assistant."},
-                {"role": "user", "content": prompt_content_list}
+                {"role": "system", "content": system_prompt_text},
+                {"role": "user", "content": user_prompt_content_list}
             ],
-            "max_tokens": 500, # Adjust as needed, ensure it's enough for the JSON response
+            "max_tokens": 1000, # Adjust as needed, ensure it's enough for the JSON response
             "temperature": 0.2, # Lower temperature for more deterministic moderation responses
             # Enforce JSON output if the model supports it (some models use tool/function calling)
             # "response_format": {"type": "json_object"} # Uncomment if model supports this parameter
@@ -367,28 +438,31 @@ Now, analyze the provided message content and images:
         rule_violated = ai_decision.get("rule_violated", "Unknown")
         reasoning = ai_decision.get("reasoning", "No reasoning provided.")
         action = ai_decision.get("action", "NOTIFY_MODS").upper() # Default to notify mods
+        guild_id = message.guild.id # Get guild_id once
+        user_id = message.author.id # Get user_id once
 
-        moderator_role_id = get_guild_config(message.guild.id, "MODERATOR_ROLE_ID")
+        moderator_role_id = get_guild_config(guild_id, "MODERATOR_ROLE_ID")
         moderator_role = message.guild.get_role(moderator_role_id) if moderator_role_id else None
         mod_ping = moderator_role.mention if moderator_role else f"Moderators (Role ID {moderator_role_id} not found)"
+
+        current_timestamp_iso = datetime.datetime.utcnow().isoformat() + "Z"
 
         # --- Transmit action info over HTTP POST ---
         try:
             mod_log_api_secret = os.getenv("MOD_LOG_API_SECRET")
             if mod_log_api_secret:
-                guild_id = message.guild.id
                 post_url = f"https://slipstreamm.dev/dashboard/api/guilds/{guild_id}/ai-moderation-action"
                 payload = {
-                    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                    "timestamp": current_timestamp_iso,
                     "guild_id": guild_id,
                     "guild_name": message.guild.name,
                     "channel_id": message.channel.id,
                     "channel_name": message.channel.name,
                     "message_id": message.id,
                     "message_link": message.jump_url,
-                    "user_id": message.author.id,
+                    "user_id": user_id,
                     "user_name": str(message.author),
-                    "action": action,
+                    "action": action, # This will be the AI suggested action before potential overrides
                     "rule_violated": rule_violated,
                     "reasoning": reasoning,
                     "violation": ai_decision.get("violation", False),
@@ -396,19 +470,22 @@ Now, analyze the provided message content and images:
                     "full_message_content": message.content if message.content else "",
                     "attachments": [a.url for a in message.attachments] if message.attachments else [],
                     "ai_model": OPENROUTER_MODEL,
-                    "result": "pending"
+                    "result": "pending_system_action" # Indicates AI decision received, system action pending
                 }
                 headers = {
                     "Authorization": f"Bearer {mod_log_api_secret}",
                     "Content-Type": "application/json"
                 }
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(post_url, headers=headers, json=payload, timeout=10) as resp:
-                        payload["result"] = "success" if resp.status < 400 else f"error:{resp.status}"
+                async with aiohttp.ClientSession() as http_session: # Renamed session to avoid conflict
+                    async with http_session.post(post_url, headers=headers, json=payload, timeout=10) as resp:
+                        # This payload is just for the initial AI decision log
+                        # The actual outcome will be logged after the action is performed
+                        if resp.status >= 400:
+                             print(f"Failed to POST initial AI decision log: {resp.status}")
             else:
-                print("MOD_LOG_API_SECRET not set; skipping action POST.")
+                print("MOD_LOG_API_SECRET not set; skipping initial action POST.")
         except Exception as e:
-            print(f"Failed to POST action info: {e}")
+            print(f"Failed to POST initial action info: {e}")
 
         # --- Prepare Notification ---
         notification_embed = discord.Embed(
@@ -444,53 +521,104 @@ Now, analyze the provided message content and images:
                 action_taken_message = f"Action Taken: User **BANNED** and message deleted."
                 notification_embed.color = discord.Color.dark_red()
                 try:
-                    # Attempt to delete the message first
                     await message.delete()
-                except discord.NotFound:
-                    print("Message already deleted before banning.")
+                except discord.NotFound: print("Message already deleted before banning.")
                 except discord.Forbidden:
                     print(f"WARNING: Missing permissions to delete message before banning user {message.author}.")
                     action_taken_message += " (Failed to delete message - check permissions)"
-
-                # Ban the user
-                ban_reason = f"Violation of Rule {rule_violated}. AI Reason: {reasoning}"
-                await message.guild.ban(message.author, reason=ban_reason, delete_message_days=1) # Delete last 1 day of messages
+                ban_reason = f"AI Mod: Rule {rule_violated}. Reason: {reasoning}"
+                await message.guild.ban(message.author, reason=ban_reason, delete_message_days=1)
                 print(f"BANNED user {message.author} for violating rule {rule_violated}.")
+                add_user_infraction(guild_id, user_id, rule_violated, "BAN", reasoning, current_timestamp_iso)
+
+            elif action == "KICK":
+                action_taken_message = f"Action Taken: User **KICKED** and message deleted."
+                notification_embed.color = discord.Color.from_rgb(255, 127, 0) # Dark Orange
+                try:
+                    await message.delete()
+                except discord.NotFound: print("Message already deleted before kicking.")
+                except discord.Forbidden:
+                    print(f"WARNING: Missing permissions to delete message before kicking user {message.author}.")
+                    action_taken_message += " (Failed to delete message - check permissions)"
+                kick_reason = f"AI Mod: Rule {rule_violated}. Reason: {reasoning}"
+                await message.author.kick(reason=kick_reason)
+                print(f"KICKED user {message.author} for violating rule {rule_violated}.")
+                add_user_infraction(guild_id, user_id, rule_violated, "KICK", reasoning, current_timestamp_iso)
+
+            elif action.startswith("TIMEOUT"):
+                duration_seconds = 0
+                duration_readable = ""
+                if action == "TIMEOUT_SHORT":
+                    duration_seconds = 10 * 60  # 10 minutes
+                    duration_readable = "10 minutes"
+                elif action == "TIMEOUT_MEDIUM":
+                    duration_seconds = 60 * 60  # 1 hour
+                    duration_readable = "1 hour"
+                elif action == "TIMEOUT_LONG":
+                    duration_seconds = 24 * 60 * 60 # 1 day
+                    duration_readable = "1 day"
+                
+                if duration_seconds > 0:
+                    action_taken_message = f"Action Taken: User **TIMED OUT for {duration_readable}** and message deleted."
+                    notification_embed.color = discord.Color.blue()
+                    try:
+                        await message.delete()
+                    except discord.NotFound: print(f"Message already deleted before timeout for {message.author}.")
+                    except discord.Forbidden:
+                        print(f"WARNING: Missing permissions to delete message before timeout for {message.author}.")
+                        action_taken_message += " (Failed to delete message - check permissions)"
+                    
+                    timeout_reason = f"AI Mod: Rule {rule_violated}. Reason: {reasoning}"
+                    # discord.py timeout takes a timedelta object
+                    await message.author.timeout(discord.utils.utcnow() + datetime.timedelta(seconds=duration_seconds), reason=timeout_reason)
+                    print(f"TIMED OUT user {message.author} for {duration_readable} for violating rule {rule_violated}.")
+                    add_user_infraction(guild_id, user_id, rule_violated, action, reasoning, current_timestamp_iso)
+                else:
+                    action_taken_message = "Action Taken: **Unknown timeout duration, notifying mods.**"
+                    action = "NOTIFY_MODS" # Fallback if timeout duration is not recognized
+                    print(f"Unknown timeout duration for action {action}. Defaulting to NOTIFY_MODS.")
+
 
             elif action == "DELETE":
                 action_taken_message = f"Action Taken: Message **DELETED**."
                 await message.delete()
                 print(f"DELETED message from {message.author} for violating rule {rule_violated}.")
+                # Typically, a simple delete isn't a formal infraction unless it's part of a WARN.
+                # If you want to log deletes as infractions, add:
+                # add_user_infraction(guild_id, user_id, rule_violated, "DELETE", reasoning, current_timestamp_iso)
+
 
             elif action == "WARN":
-                 # For WARN, we will delete the message and notify mods. Optionally DM user.
                 action_taken_message = f"Action Taken: Message **DELETED** (AI suggested WARN)."
                 notification_embed.color = discord.Color.orange()
-                await message.delete()
+                await message.delete() # Warnings usually involve deleting the offending message
                 print(f"DELETED message from {message.author} (AI suggested WARN for rule {rule_violated}).")
-                # Optional: DM the user
                 try:
                     dm_channel = await message.author.create_dm()
                     await dm_channel.send(
                         f"Your recent message in **{message.guild.name}** was removed for violating Rule **{rule_violated}**. "
-                        f"Reason: _{reasoning}_. Please review the server rules carefully."
+                        f"Reason: _{reasoning}_. Please review the server rules. This is a formal warning."
                     )
-                    action_taken_message += " User notified via DM."
+                    action_taken_message += " User notified via DM with warning."
                 except discord.Forbidden:
                     print(f"Could not DM warning to {message.author} (DMs likely disabled).")
-                    action_taken_message += " (Could not DM user)."
+                    action_taken_message += " (Could not DM user for warning)."
                 except Exception as e:
-                    print(f"Error sending DM to {message.author}: {e}")
-                    action_taken_message += " (Error sending DM)."
+                    print(f"Error sending warning DM to {message.author}: {e}")
+                    action_taken_message += " (Error sending warning DM)."
+                add_user_infraction(guild_id, user_id, rule_violated, "WARN", reasoning, current_timestamp_iso)
 
 
             elif action == "NOTIFY_MODS":
                 action_taken_message = "Action Taken: **Moderator review requested.**"
                 notification_embed.color = discord.Color.gold()
                 print(f"Notifying moderators about potential violation (Rule {rule_violated}) by {message.author}.")
+                # NOTIFY_MODS itself isn't an infraction on the user, but a request for human review.
+                # If mods take action, they would log it manually or via a mod command.
 
             elif action == "SUICIDAL":
                 action_taken_message = "Action Taken: **User DMed resources, relevant role notified.**"
+                # No infraction is typically logged for "SUICIDAL" as it's a support action.
                 notification_embed.title = "🚨 Suicidal Content Detected 🚨"
                 notification_embed.color = discord.Color.dark_purple() # A distinct color
                 notification_embed.description = "AI analysis detected content indicating potential suicidal ideation."
@@ -593,33 +721,38 @@ Now, analyze the provided message content and images:
         message_content_lower = message.content.lower()
         # Suicidal keyword check removed; handled by OpenRouter AI moderation.
 
-        # --- Rule 6 Check (Channel Usage - Basic) ---
-        # Simple check for common bot command prefixes in wrong channels
-        common_prefixes = ('!', '?', '.', '$', '%', '/', '-') # Add more if needed
+                # --- Rule 6 Check (Channel Usage - Basic) ---
+        # This rule is handled before AI analysis for efficiency if it's a simple command prefix check.
+        # If Rule 6 violations should also go through AI and progressive discipline, this logic would need to move.
+        common_prefixes = ('!', '?', '.', '$', '%', '/', '-') 
         is_likely_bot_command = message.content.startswith(common_prefixes)
         bot_commands_channel_ids = get_guild_config(message.guild.id, "BOT_COMMANDS_CHANNEL_ID", [])
-        if isinstance(bot_commands_channel_ids, int):
+        if isinstance(bot_commands_channel_ids, int): # Ensure it's a list
             bot_commands_channel_ids = [bot_commands_channel_ids]
-        is_in_bot_commands_channel = message.channel.id in bot_commands_channel_ids
+        
+        # Check if the current channel is NOT a bot command channel
+        # AND the message is likely a bot command
+        # AND the message is not in the suggestions channel (if suggestions can also have commands)
         suggestions_channel_id = get_guild_config(message.guild.id, "SUGGESTIONS_CHANNEL_ID")
-        is_in_suggestions_channel = message.channel.id == suggestions_channel_id
 
-        # If it looks like a command AND it's NOT in the commands channel...
-        if is_likely_bot_command and not is_in_bot_commands_channel:
+        if is_likely_bot_command and \
+           message.channel.id not in bot_commands_channel_ids and \
+           message.channel.id != suggestions_channel_id:
             try:
                 await message.delete()
-                bot_commands_channel_id = bot_commands_channel_ids[0] if bot_commands_channel_ids else None
-                warning_channel_ref = f"<#{bot_commands_channel_id}>" if bot_commands_channel_id else "the correct channel"
-                warning = await message.channel.send(
-                    f"{message.author.mention}, please use bot commands only in {warning_channel_ref} (Rule 6).",
-                    delete_after=20 # Delete the warning after 20 seconds
+                bot_commands_channel_mention = f"<#{bot_commands_channel_ids[0]}>" if bot_commands_channel_ids else "the designated bot commands channel"
+                await message.channel.send(
+                    f"{message.author.mention}, please use bot commands only in {bot_commands_channel_mention} (Rule 6).",
+                    delete_after=20
                 )
-                print(f"Deleted message from {message.author} in #{message.channel.name} for violating Rule 6 (Bot Command).")
+                print(f"Deleted message from {message.author} in #{message.channel.name} for violating Rule 6 (Bot Command in wrong channel).")
+                # Optionally, log this as a minor infraction if desired, though it's usually just a redirect.
+                # add_user_infraction(message.guild.id, message.author.id, "6", "REDIRECTED_RULE6", "Bot command in wrong channel.", datetime.datetime.utcnow().isoformat() + "Z")
             except discord.Forbidden:
-                print(f"Missing permissions to delete message/send warning in #{message.channel.name} for Rule 6 violation.")
+                print(f"Missing permissions to delete/warn for Rule 6 in #{message.channel.name}.")
             except discord.NotFound:
                 print("Message already deleted (Rule 6 check).")
-            return # Stop further processing for this message
+            return # Stop further AI processing for this specific violation type
 
         # --- Prepare for AI Analysis ---
         message_content = message.content
@@ -640,15 +773,25 @@ Now, analyze the provided message content and images:
                           (hasattr(message.channel, 'is_nsfw') and message.channel.is_nsfw())
 
         # --- Call AI for Analysis (Rules 1-5A, 7) ---
-        # Skip AI call if API key isn't set correctly
         if not OPENROUTER_API_KEY or OPENROUTER_API_KEY == "YOUR_OPENROUTER_API_KEY":
-             # This check prevents API calls if the key wasn't loaded.
-             # The warning is printed during __init__ and query_openrouter.
-             # print("Skipping AI analysis because API key is not configured.") # Reduce log spam
              return
 
-        print(f"Analyzing message {message.id} from {message.author} in #{message.channel.name}...")
-        ai_decision = await self.query_openrouter(message, message_content, image_urls)
+        # Prepare user history for the AI
+        infractions = get_user_infraction_history(message.guild.id, message.author.id)
+        history_summary_parts = []
+        if infractions:
+            for infr in infractions:
+                history_summary_parts.append(f"- Action: {infr.get('action_taken', 'N/A')} for Rule {infr.get('rule_violated', 'N/A')} on {infr.get('timestamp', 'N/A')[:10]}. Reason: {infr.get('reasoning', 'N/A')[:50]}...")
+        user_history_summary = "\n".join(history_summary_parts) if history_summary_parts else "No prior infractions recorded."
+        
+        # Limit history summary length to prevent excessively long prompts
+        max_history_len = 500 
+        if len(user_history_summary) > max_history_len:
+            user_history_summary = user_history_summary[:max_history_len-3] + "..."
+
+
+        print(f"Analyzing message {message.id} from {message.author} in #{message.channel.name} with history...")
+        ai_decision = await self.query_openrouter(message, message_content, image_urls, user_history_summary)
 
         # --- Process AI Decision ---
         if not ai_decision:
